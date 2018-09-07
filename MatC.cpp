@@ -214,6 +214,7 @@ Matrix * mat_read(const char * filename)
 }
 void mat_output(Matrix * m, const char * title)
 {
+	if (m == NULL) return;
 	printf("Matrix %s : rows=%d\tcols=%d\n", title, m->rows, m->cols);
 	for (int i = 0;i < m->rows;i++)
 	{

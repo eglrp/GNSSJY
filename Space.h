@@ -3,15 +3,19 @@
 #include "DataStore.h"
 #define PI 3.1415926535897932384626433832795
 #define PI_d_2 (PI/2)
+
+#define FREQ1       1.57542E9           /* L1/E1  frequency (Hz) */
+#define FREQ2       1.22760E9           /* L2     frequency (Hz) */
+
 struct BLH;
 struct XYZ;
 struct ENU;
 
 struct Coordinate{
+	double a;
 	double f;
-	double e;
 };
-#define WGS_84 {0, 0}
+#define WGS_84 {6378137.0,1.0/298.257223563}
 
 struct BLH {
 	double B, L, H;
@@ -64,7 +68,10 @@ struct XYZ{
 
 class SpaceTool{
 public:
-
+	static double get_arc(double deg)
+	{
+		return deg * 180.0 / PI;
+	}
 	static double get_atan(double z, double y)
 	{
 		double x = 0;

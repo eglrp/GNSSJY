@@ -76,6 +76,6 @@ struct GPSTime
 
 	double minus(GPSTime * obj)
 	{
-		return sec - obj->sec;
+		return (week - obj->week) * 7 * 24 * 3600 + sec - obj->sec;
 	}
 };

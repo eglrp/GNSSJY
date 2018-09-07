@@ -369,6 +369,10 @@ public:
 		}
 	}
 
+	double get_interval()
+	{
+		return header.interval;
+	}
 	//virtual wstring description(){
 	//	std::wostringstream w;
 	//	w << L"RINEX2ObservationFileInput filename: " << filename << endl;
@@ -420,9 +424,9 @@ public:
 
 			for(int j = 0; j < first_line_num; j++)
 			{
-				int offset = j * 16;
+				unsigned int offset = j * 16;
 				int type = header.type_of_obs[j];
-				if (strlen(line_buffer + offset) < 14 || strlen(line_buffer) < offset) {
+				if (strlen(line_buffer + offset) < 14U || strlen(line_buffer) < offset) {
 					aim.values[type] = OBS_DISABLED;
 					continue;
 				}
@@ -449,10 +453,10 @@ public:
 				fgets(line_buffer, 90, fp);
 				for(int j = 0; j < header.obs_number - 5; j++)
 				{
-					int offset = j * 16;
+					unsigned int offset = j * 16;
 					int type = header.type_of_obs[j + 5];
 
-					if (strlen(line_buffer + offset) < 14 || strlen(line_buffer) < offset) {
+					if (strlen(line_buffer + offset) < 14U || strlen(line_buffer) < offset) {
 						aim.values[type] = OBS_DISABLED;
 						continue;
 					}
