@@ -8,10 +8,10 @@
 #define GNSS_SATELLITE_AMOUNT 50
 
 
-#define c 299792458.0
+#define LIGHT_SPEED 299792458.0
 #define mu 3.986004415E14
 #define we 7.2921151467e-5
-#define R1 4.442807633e-10
+#define R_1 4.442807633e-10
 #define SECPERDAY (3600*24)
 #define PI2 (PI*2)
 #define Deg (180.0/PI)
@@ -101,7 +101,7 @@ struct Broadcast: public checkable{ // using RINEX definition for common usage.
 
 		//归化时间tk
 		//GPSTime pre_gps = GPSTime(pre);
-		double t = pre->sec - approx_distance / c;
+		double t = pre->sec - approx_distance / LIGHT_SPEED;
 		double tk = t - toe;
 		if (fabs(tk)>7200)
 		{

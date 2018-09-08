@@ -83,18 +83,18 @@ protected:
 	{
 		Observation & obs = set.obs[index];
 		Broadcast  & nav = set.nav[index];
-		double dtc = pre->minus(&nav.toc) - obs.values[obs_type] / c;
+		double dtc = pre->minus(&nav.toc) - obs.values[obs_type] / LIGHT_SPEED;
 		double s =   nav.sv_clock_bias
 				   + nav.sv_clock_drift      * dtc
 				   + nav.sv_clock_drift_rate * dtc;
 
-		double r = (R1 * nav.eccentricity * sin(nav.Ek) * nav.sqrt_a);
-		observation[satellite_amount] = obs.values[obs_type] + s * c;//星钟差
-		observation[satellite_amount] -= r * c; //相对论
-		observation[satellite_amount] -= nav.tgd * c;//群延迟
+		double r = (R_1 * nav.eccentricity * sin(nav.Ek) * nav.sqrt_a);
+		observation[satellite_amount] = obs.values[obs_type] + s * LIGHT_SPEED;//星钟差
+		observation[satellite_amount] -= r * LIGHT_SPEED; //相对论
+		observation[satellite_amount] -= nav.tgd * LIGHT_SPEED;//群延迟
 		
 		//地球自转改正
-		double dA = we * (observation[satellite_amount] / c - s + r);
+		double dA = we * (observation[satellite_amount] / LIGHT_SPEED - s + r);
 		satellite_position[satellite_amount].X = sat_loc->X + sat_loc->Y * dA;
 		satellite_position[satellite_amount].Y = sat_loc->Y - sat_loc->X * dA;
 		satellite_position[satellite_amount].Z = sat_loc->Z;
@@ -486,18 +486,18 @@ protected:
 		last_observation[index] = obs.values[obs_type];
 		last_phase[index] = obs.values[phase];
 
-		double dtc = pre->minus(&nav.toc) - obs.values[obs_type] / c;
+		double dtc = pre->minus(&nav.toc) - obs.values[obs_type] / LIGHT_SPEED;
 		double s =   nav.sv_clock_bias
 				   + nav.sv_clock_drift      * dtc
 				   + nav.sv_clock_drift_rate * dtc;
 
-		double r = (R1 * nav.eccentricity * sin(nav.Ek) * nav.sqrt_a);
-		observation[satellite_amount] = obs.values[obs_type] + s * c;//星钟差
-		observation[satellite_amount] -= r * c; //相对论
-		observation[satellite_amount] -= nav.tgd * c;//群延迟
+		double r = (R_1 * nav.eccentricity * sin(nav.Ek) * nav.sqrt_a);
+		observation[satellite_amount] = obs.values[obs_type] + s * LIGHT_SPEED;//星钟差
+		observation[satellite_amount] -= r * LIGHT_SPEED; //相对论
+		observation[satellite_amount] -= nav.tgd * LIGHT_SPEED;//群延迟
 		
 		//地球自转改正
-		double dA = we * (observation[satellite_amount] / c - s + r);
+		double dA = we * (observation[satellite_amount] / LIGHT_SPEED - s + r);
 		satellite_position[satellite_amount].X = sat_loc->X + sat_loc->Y * dA;
 		satellite_position[satellite_amount].Y = sat_loc->Y - sat_loc->X * dA;
 		satellite_position[satellite_amount].Z = sat_loc->Z;
@@ -513,11 +513,11 @@ public:
 		{
 			case C1:
 				phase = L1;
-				lamda = c / FREQ1; // L1波长
+				lamda = LIGHT_SPEED / FREQ1; // L1波长
 				break;
 			case C2:
 				phase = L2;
-				lamda = c / FREQ2; // L2波长
+				lamda = LIGHT_SPEED / FREQ2; // L2波长
 				break;
 			default:
 				throw INVALID_INPUT;

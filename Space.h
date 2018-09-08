@@ -1,6 +1,8 @@
 #pragma once
 #include <math.h>
 #include "DataStore.h"
+
+#include "MatC.h"
 #define PI 3.1415926535897932384626433832795
 #define PI_d_2 (PI/2)
 
@@ -21,13 +23,38 @@ struct BLH {
 	double B, L, H;
 	//void toXYZ(XYZ * out, const Coordinate * coor);
 	//void toXYZ(XYZ * out);
+	Matrix * getENUTrans()
+	{
+		Matrix * E = malloc_mat(3, 3);
+		double pos[] = { B, L, H };
+		double sinp = sin(pos[0]), cosp = cos(pos[0]), sinl = sin(pos[1]), cosl = cos(pos[1]);
+		E->data[0][0] = -sinl;       E->data[0][1] = cosl;        E->data[0][2] = 0.0;
+		E->data[1][0] = -sinp*cosl;  E->data[1][1] = -sinp*sinl;  E->data[1][2] = cosp;
+		E->data[2][0] = cosp*cosl;   E->data[2][1] = cosp*sinl;   E->data[2][2] = sinp;
+		return E;
+	}
 };
 struct ENU {
 	double E, N, U;
+	ENU(double A = 0, double B = 0, double C = 0) : E(A), N(B), U(C) {}
 };
 struct XYZ{
 	double X, Y, Z;
 	//void toBLH(BLH * out, const Coordinate * coor);
+
+	void getENULocationFrom(XYZ & origin, Matrix * E, ENU & enu)
+	{
+		Matrix * dpos = malloc_mat(3, 1);
+		Matrix * e = NULL;
+		dpos->data[0][0] = this->X - origin.X;
+		dpos->data[1][0] = this->Y - origin.Y;
+		dpos->data[2][0] = this->Z - origin.Z;
+		mat_multiply(E, dpos, e);
+		enu = ENU(e->data[0][0], e->data[1][0], e->data[2][0]);
+		free_mat(dpos);
+		free_mat(e);
+	}
+
 	void toBLH(BLH * out) // using WGS_84 as the coordinate
 	{
 		const static double a = 6378137.0;

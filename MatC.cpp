@@ -33,11 +33,11 @@ void repack_mat(Matrix * item, int rows, int cols)
 Matrix * malloc_mat(int rows, int cols)
 {
 	Matrix * tot = (Matrix*)malloc(sizeof(Matrix));
-	tot->data = (element**)malloc(sizeof(element*) * rows);
+	tot->data = (double**)malloc(sizeof(double*) * rows);
 	for (int i = 0;i < rows;i++)
 	{
-		tot->data[i] = (element*)malloc(sizeof(element) * cols);
-		memset(tot->data[i], 0, sizeof(element) * cols);
+		tot->data[i] = (double*)malloc(sizeof(double) * cols);
+		memset(tot->data[i], 0, sizeof(double) * cols);
 	}
 	tot->rows = rows;
 	tot->cols = cols;
@@ -59,7 +59,7 @@ Matrix * copy_mat(Matrix * from)
 {
 	Matrix * tot = malloc_mat(from->rows, from->cols);
 	for (int i = 0;i < from->rows;i++)
-		memcpy(tot->data[i], from->data[i], sizeof(element) * from->cols);
+		memcpy(tot->data[i], from->data[i], sizeof(double) * from->cols);
 	return tot;
 }
 void mat_sum(Matrix * M1, Matrix * M2, Matrix *& out)
@@ -104,7 +104,7 @@ void mat_multiply(Matrix * M1, Matrix * M2, Matrix *& out)
 		{
 			for (int k = 0;k < M1->cols;k++)
 			{
-				element num = M1->data[i][k] * M2->data[k][j];
+				double num = M1->data[i][k] * M2->data[k][j];
 				out->data[i][j] += num;
 			}
 		}
@@ -127,8 +127,8 @@ void mat_inv(Matrix * M1, Matrix *& out)
 	Matrix * M1_copy = copy_mat(M1);
 	int dimension = M1->cols;
 	out = eyes(dimension);
-	element ** input = M1_copy->data;
-	element ** output = out->data;
+	double ** input = M1_copy->data;
+	double ** output = out->data;
 	int i, j, k;
 	for (i = 0;i<dimension;++i)
 	{

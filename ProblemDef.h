@@ -1,5 +1,5 @@
 #pragma once
-enum error
+enum MyError
 {
 	FILE_NOT_FOUND = 1,
 	FILE_TYPE_NOT_CORRECT = 2,
