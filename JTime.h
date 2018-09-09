@@ -52,6 +52,7 @@ struct UTC {
 	UTC(MJDTime time);
 	bool larger_than(UTC u1);
 	UTC() = default;
+	int minus(UTC * obj);
 };
 struct MJDTime
 {

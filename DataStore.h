@@ -5,7 +5,7 @@
 #include "JTime.h"
 //#include "RINEX2.h"
 #define MAX_OBSER_TYPE 9
-#define GNSS_SATELLITE_AMOUNT 50
+#define GNSS_SATELLITE_AMOUNT 150
 
 
 #define LIGHT_SPEED 299792458.0
@@ -41,7 +41,6 @@ struct checkable{
 protected:
 	bool available;
 };
-
 
 struct Broadcast: public checkable{ // using RINEX definition for common usage.
 
@@ -176,7 +175,20 @@ struct Observation: public checkable{
 	}
 };
 
+struct TECMap: public checkable{
+	UTC fresh_time;
+	Matrix * data;
+	double height;
+	double row_step;
+	double col_step;
+	double row_start;
+	double col_start;
+};
 
+struct IONModel: public checkable{
+	double alpha[4];
+	double beta[4];
+};
 
 struct GNSSDataSet{
 	UTC obs_time;
@@ -188,14 +200,25 @@ struct GNSSDataSet{
 
 	StationInfo * sta;
 
+	// ion
+	TECMap      tec;
+	IONModel    ion_model;
+
+
 	// passing-on
 	XYZ current_solution;
+	bool solution_available()
+	{
+		return current_solution.X != 0;
+	}
 	GNSSDataSet()
 	{
 		memset(nav, 0, sizeof(Broadcast) * GNSS_SATELLITE_AMOUNT);
 		memset(obs, 0, sizeof(Observation) * GNSS_SATELLITE_AMOUNT);
 
 		current_solution = {0, 0, 0};
+		tec.check(false);
+		ion_model.check(false);
 		To = 0;
 	}
 };

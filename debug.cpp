@@ -13,11 +13,17 @@
 int main()
 {
 	GNSSDataSet dataset;
-	RINEX2ObservationFileInput inputo(L"20160620.16O");
-	RINEX2NavigationFileInput inputn(L"20160620.16N");
-
+	RINEX2ObservationFileInput inputo(L"bjfs1960.18o");
+	RINEX2NavigationFileInput  inputn(L"bjfs1960.18n");
+	RINEXIonosphereFileInput   inputi(L"whug1960.18i", &dataset.tec);
+	dataset.sta = inputo.get_sta();
 	
-	IMGSolutionFileOutput outputt(L"20160620.sln.bmp", SIZE_10M);
+	IMGSolutionFileOutput outputt(
+		L"bjfs1960.sln.bmp", SIZE_100M, 
+		dataset.sta->approx_position.X == 0 ? NULL : &dataset.sta->approx_position, 
+		false,
+		10000
+	);
 	outputt.reserve(10000);
 
 	//TXTSolutionFileOutput outputt(L"20160620.sln.txt");
@@ -26,15 +32,15 @@ int main()
 	//SimpleSmoothedSolver solver(inputo.get_interval());
 	//SimpleKinematicSolver solver(inputo.get_interval());
 	SimpleSolver solver;
-	dataset.sta = inputo.get_sta();
 
 	//GPSTime pre = GPSTime(dataset.obs_time);
 	int epoch_counter = 0;
 	try {
 		while (true)
 		{
-			inputo.get_once(dataset.obs, &dataset.obs_time);
-			inputn.try_once(dataset.nav, &dataset.obs_time);
+			inputo.get_once( dataset.obs, &dataset.obs_time);
+			inputn.try_once( dataset.nav, &dataset.obs_time);
+			inputi.try_once(&dataset.tec, &dataset.obs_time);
 			solver.execute(dataset);
 			outputt.put_once(dataset);
 			epoch_counter++;

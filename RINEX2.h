@@ -14,29 +14,11 @@ char symbol_of_rinex_obs[MAX_OBSER_TYPE][3]
 	{"L1"},{"L2"},{"P1"},{"P2"},{"C1"},{"C2"},{"S1"},{"S2"},{"D1"},
 };
 
-struct RinexNavFileHeader{
-	// RINEX VERSION / TYPE
-	double rinex_version;
-	char file_type[20];
-	char satellite_system[20];
+struct RinexNavFileHeader: public RinexFileHeader {
 
-	// PGM / RUN BY / DATE
-	char name_of_pgm[21];
-	char name_of_agency[21];
-	char data_of_create[21];
 };
 
-struct RinexObsFileHeader : public StationInfo{
-
-	// RINEX VERSION / TYPE
-	double rinex_version;
-	char file_type[20];
-	char satellite_system[20];
-
-	// PGM / RUN BY / DATE
-	char name_of_pgm[21];
-	char name_of_agency[21];
-	char data_of_create[21];
+struct RinexObsFileHeader : public StationInfo, public RinexFileHeader {
 
 	// INTERVAL
 	double interval;
@@ -58,12 +40,245 @@ struct RinexObsFileHeader : public StationInfo{
 	char marker_number[21];
 };
 
+struct RinexIonFileHeader : public RinexFileHeader{
+
+	// EPOCH OF FIRST MAP
+	char time_of_first[61];
+
+	// EPOCH OF LAST MAP
+	char time_of_last[61];
+
+	// INTERVAL
+	double interval; // 0 for variable intervals
+
+	// # OF MAPS IN FILE
+	int maps;
+
+	// MAPPING FUNCTION
+	char mapping_function[5]; // 'NONE' for no mf, 'COSZ' for 1/cos(Z), 'QFAC' for Q-factor
+
+	// ELEVATION CUTOFF
+	double elevation_cutoff; // 0.0 for unknown, 90.0 for altimetry.
+
+	// OBSERVABLES USED 
+	char observables_used[61];
+
+	// # OF STATIONS
+	int of_stations;
+
+	// # OF SATELLITES
+	int of_satellites;
+
+	// BASE RADIUS
+	double base_radius; // for km
+
+	// MAP DIMENSION
+	int map_dimention;
+
+	// HGT1 / HGT2 / DHGT
+	double HGT12D[3];
+
+	// LAT1 / LAT2 / DLAT
+	double LAT12D[3];
+
+	// LON1 / LON2 / DLON
+	double LON12D[3];
+
+	// EXPONENT
+	int exponent;
+};
+
+class RINEXIonosphereFileInput: public FileInput, public IonosphereInput, public RINEX2Input{
+private:
+	RinexIonFileHeader header;
+	//char ion_buffer[7];
+protected:
+	virtual int parse_header_line(const char * content, const char * title)
+	{
+		if(!strncmp(title, "RINEX VERSION / TYPE", 20))
+		{
+			sscanf(content, "%lf", &header.rinex_version);
+			if(header.rinex_version >= 3)return -1;
+
+			strncpy(header.file_type,        content + 20, 19);
+			if(strcmp(header.file_type, "N: GPS NAV DATA    ")) return -1;
+
+			strncpy(header.satellite_system, content + 39, 19);
+		}
+		else if(!strncmp(title, "PGM / RUN BY / DATE", 19))
+		{
+			strncpy(header.name_of_pgm,      content     , 20);
+			strncpy(header.name_of_agency,   content + 20, 20);
+			strncpy(header.data_of_create,   content + 40, 20);
+		}
+		else if(!strncmp(title, "EPOCH OF FIRST MAP", 18))
+		{
+			strncpy(header.time_of_first,    content, 60);
+		}
+		else if(!strncmp(title, "EPOCH OF LAST MAP", 17))
+		{
+			strncpy(header.time_of_last,     content, 60);
+		}
+		else if(!strncmp(title, "INTERVAL", 8))
+		{
+			sscanf(content, "%lf", &header.interval);
+		}
+		else if(!strncmp(title, "# OF MAPS IN FILE", 17))
+		{
+			sscanf(content, "%d", &header.maps);
+		}
+		else if(!strncmp(title, "MAPPING FUNCTION", 16))
+		{
+			strncpy(header.mapping_function,  content + 2, 4);
+		}
+		else if(!strncmp(title, "ELEVATION CUTOFF", 16))
+		{
+			sscanf(content, "%lf", &header.elevation_cutoff);
+		}
+		else if(!strncmp(title, "OBSERVABLES USED", 16))
+		{
+			strncpy(header.observables_used,  content, 60);
+		}
+		else if(!strncmp(title, "# OF STATIONS", 13))
+		{
+			sscanf(content, "%d", &header.of_stations);
+		}
+		else if(!strncmp(title, "# OF SATELLITES", 15))
+		{
+			sscanf(content, "%d", &header.of_satellites);
+		}
+		else if(!strncmp(title, "BASE RADIUS", 11))
+		{
+			sscanf(content, "%lf", &header.base_radius);
+		}
+		else if(!strncmp(title, "HGT1 / HGT2 / DHGT", 18))
+		{
+			sscanf(content, "%lf%lf%lf", 
+				&header.HGT12D[0], &header.HGT12D[1], &header.HGT12D[2]);
+		}
+		else if(!strncmp(title, "LAT1 / LAT2 / DLAT", 18))
+		{
+			sscanf(content, "%lf%lf%lf", 
+				&header.LAT12D[0], &header.LAT12D[1], &header.LAT12D[2]);
+		}
+		else if(!strncmp(title, "LON1 / LON2 / DLON", 18))
+		{
+			sscanf(content, "%lf%lf%lf", 
+				&header.LON12D[0], &header.LON12D[1], &header.LON12D[2]);
+		}
+		else if(!strncmp(title, "END OF HEADER", 13))
+		{
+			return 1;
+		}
+		return 0;
+	}
+
+	virtual bool parse_header()
+	{
+		if (!fp) { any_error = true; return false; }
+
+		while(true){
+			if(feof(fp)) {
+				any_error = true;
+				throw FILE_FORMAT_NOT_CORRECT;
+			}
+			fgets(line_buffer, 61, fp);
+			fgets(line_buffer + 61, 30, fp);
+			line_buffer[60 + strlen(line_buffer + 61)] = '\0';
+
+			int ret = parse_header_line(line_buffer, line_buffer + 61);
+			
+			if(ret == 1) break; // means the end of reading
+			else if(ret == -1) {
+				any_error = true;
+				throw FILE_TYPE_NOT_CORRECT;
+			}
+		}
+
+		return true;
+	}
+	// double extract_double(const char * pointee, int length)
+	// {
+	// 	if(strlen(pointee) < length) return 0;
+	// 	strncpy(ion_buffer, pointee, length);
+	// 	return atof(ion_buffer);
+	// }
+public:
+	virtual bool is_valid()
+	{
+		return !any_error;
+	}
+	RINEXIonosphereFileInput(wstring fn, TECMap * map) {
+		media = InputMedia::IN_DISK;
+		protocol = InputProtocol::IN_RINEX2;
+		usage = InputUsage::IN_IONOSPHERE;
+		filename = fn;
+
+		fp = _wfopen(fn.c_str(), L"r");
+		if(fp == NULL) throw FILE_NOT_FOUND;
+
+		if(!parse_header()){
+			throw UNEXPECTED;
+		}
+
+		int rows = (int)round((header.LAT12D[1] - header.LAT12D[0]) / header.LAT12D[2]) + 1;
+		int cols = (int)round((header.LON12D[1] - header.LON12D[0]) / header.LON12D[2]) + 1;
+		map->data = malloc_mat(rows, cols);
+		map->row_step = header.LAT12D[2];
+		map->col_step = header.LON12D[2];
+		map->row_start = header.LAT12D[0];
+		map->col_start = header.LON12D[0];
+		map->fresh_time = UTC();
+	}
+
+	virtual bool try_once(TECMap * map, UTC * time)
+	{
+		bool renewed = false;
+		if(time->minus(&map->fresh_time) >= header.interval)
+		{
+			if(feof(fp)) {
+				any_error = true;
+				throw FILE_FORMAT_NOT_CORRECT;
+			}
+
+			fgets(line_buffer, 100, fp); // START OF TEC MAP
+			fgets(line_buffer, 100, fp); // EPOCH OF CURRENT MAP
+			
+			double sec;
+			sscanf(line_buffer, "%d%d%d%d%d%lf",
+				&map->fresh_time.year,
+				&map->fresh_time.month,
+				&map->fresh_time.date,
+				&map->fresh_time.hour,
+				&map->fresh_time.minute,
+				&sec
+			);
+			map->fresh_time.sec = (int)round(sec);
+			map->fresh_time.year -= map->fresh_time.year > 2000 ? 2000 : 1900;
+
+			fgets(line_buffer, 100, fp); // LAT/LON1/LON2/DLON/H
+
+			for(int i = 0; i < map->data->rows; i ++)
+			{
+				for(int j = 0;j < map->data->cols; j++)
+				{
+					fscanf(fp, "%lf", &map->data->data[i][j]);
+				}
+				fscanf(fp, "\n");
+				fgets(line_buffer, 100, fp); // LAT/LON1/LON2/DLON/H and // END OF TEC MAP
+			}
+		}
+
+		return true;
+	}
+};
+
 class RINEX2NavigationFileInput: public	FileInput, public NavigationInput, public RINEX2Input{
 private:
 	
 	RinexNavFileHeader header;
 	UTC next_navi_time;
-	char line_buffer[100];
+	
 	char nav_buffer[20];
 	int next_prn;
 
@@ -159,7 +374,7 @@ public:
 		grab_time();
 	}
 
-	bool try_once(Broadcast * nav, UTC * time)
+	virtual bool try_once(Broadcast * nav, UTC * time)
 	{
 		bool renewed = false;
 
@@ -249,6 +464,7 @@ public:
 	}
 
 };
+
 class RINEX2ObservationFileInput: public FileInput, public ObservationInput, public RINEX2Input{
 private:
 	RinexObsFileHeader header;
@@ -256,7 +472,6 @@ private:
 	// temperory usage
 	char sat_types[GNSS_SATELLITE_AMOUNT];
 	int  sat_prns[GNSS_SATELLITE_AMOUNT];
-	char line_buffer[100];
 	int health = -1;
 	int sat_num = -1;
 	char obs_buffer[15];
@@ -356,9 +571,9 @@ protected:
 
 public:
 	RINEX2ObservationFileInput(wstring fn){
-		media = InputMedia::IN_DISK;
+		media    = InputMedia::IN_DISK;
 		protocol = InputProtocol::IN_RINEX2;
-		usage = InputUsage::IN_OBSERVATION;
+		usage    = InputUsage::IN_OBSERVATION;
 		filename = fn;
 
 		fp = _wfopen(fn.c_str(), L"r");
@@ -404,10 +619,25 @@ public:
 		sscanf(line_buffer + 26, "%d%d", &health, &sat_num);
 		if(health != 0)return false;
 
+		int last_line_sat = 0;
 		for(int i = 0; i < sat_num; i++)
 		{
-			int offset = 32 + i * 3;
+			int offset = 32 + (i - last_line_sat) * 3;
+			if (strlen(line_buffer + offset) < 3)
+			{
+				fgets(line_buffer, 90, fp);
+				last_line_sat = i;
+				i = i - 1;
+				continue;
+			}
 			sscanf(line_buffer + offset, "%c%2d", &sat_types[i], &sat_prns[i]);
+			if (sat_types[i] == 'R')
+			{
+				sat_prns[i] += 50;
+			}
+			else if (sat_types[i] == 'C') {
+				sat_prns[i] += 100;
+			}
 		}
 
 		// parse the data sheet

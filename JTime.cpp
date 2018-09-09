@@ -117,6 +117,10 @@ UTC UTC::offset_hour(int h)
 	}
 	return total;
 }
+int UTC::minus(UTC * obj)
+{
+	return (int)round(GPSTime(*this).minus(&GPSTime(*obj)));
+}
 UTC::UTC(MJDTime time)
 {
 	double rest = time.frac_day * 24;

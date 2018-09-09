@@ -72,12 +72,12 @@ protected:
 			printf("%.10lf\t%.10lf\t%.10lf\t%.10lf\n", S[i], DX0[i], DY0[i], DZ0[i]);
 		}
 		
-		mat_output(Z, "Z");
-		mat_output(H, "H");
-		mat_output(D, "D");
-		mat_output(X, "X");
+		mat_output(Z,     "Z");
+		mat_output(H,     "H");
+		mat_output(D,     "D");
+		mat_output(X,     "X");
 		mat_output(Sig, "Sig");
-		mat_output(V, "V");
+		mat_output(V,     "V");
 	}
 	virtual bool pre_process(GPSTime * pre, GNSSDataSet & set, int index, XYZ * sat_loc)
 	{
@@ -98,6 +98,17 @@ protected:
 		satellite_position[satellite_amount].X = sat_loc->X + sat_loc->Y * dA;
 		satellite_position[satellite_amount].Y = sat_loc->Y - sat_loc->X * dA;
 		satellite_position[satellite_amount].Z = sat_loc->Z;
+
+		// 电离层改正
+		if(set.ion_model.good() && set.solution_available())
+		{
+			// under construction
+		}
+		else if(set.tec.good() && set.solution_available())
+		{
+			// under construction
+
+		}
 
 		satellite_amount ++;
 		return true;
@@ -324,7 +335,7 @@ protected:
 		for (int i = 0; i < satellite_amount; i++)
 		{
 			Z->data[i][0] = observation[i];
-			Dz->data[i][i] = 0.001;
+			Dz->data[i][i] = 3;
 
 			H->data[i][0] = -DX0[i] / S[i];
 			H->data[i][3] = -DY0[i] / S[i];
@@ -414,7 +425,7 @@ public:
 
 		T->data[9][3] = ttd2; T->data[10][3] = DeltaT;
 
-		De = eyes(4);De->data[0][0] = 0.001; De->data[1][1] = 0.001; De->data[2][2] = 0.001; De->data[3][3] = 0.001;
+		De = eyes(4);De->data[0][0] = 1; De->data[1][1] = 1; De->data[2][2] = 1; De->data[3][3] = 1;
 
 		mat_trans(F, Ft); mat_trans(T, Tt);
 	}
@@ -427,7 +438,7 @@ public:
 		// firstly, calculate the positions of all available satellites
 		fetch_available(set, pre);
 
-		if (set.current_solution.X == 0) // means no current solution found
+		if (!set.solution_available()) // no current solution found
 		{
 			if (satellite_amount <= 3) 
 				return false; // see if satellite enough for static

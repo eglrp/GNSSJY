@@ -131,6 +131,8 @@ protected:
 	double TEXT_SIZE;
 	double POINT_RADIUS;
 
+	double CENTER_POINT_RADIUS;
+
 #define NUM_OF_SCALE  3
 
 
@@ -161,7 +163,7 @@ protected:
 		int paint_x = (int)((pre.E + x_bias) * scale + 0.5);
 		int paint_y = (int)((-(pre.N + y_bias) * scale) + MAT_EDGE);
 		Point point(paint_x, paint_y);
-		circle(paint, point, (int)POINT_RADIUS, ui_colors[9], (int)LINE_WIDTH);
+		circle(paint, point, (int)POINT_RADIUS, ui_colors[7], (int)LINE_WIDTH);
 		if (is_first)
 		{
 			is_first = false;
@@ -170,6 +172,16 @@ protected:
 			if (draw_line) line(paint, last_point, point, ui_colors[2], (int)LINE_WIDTH);
 		}
 		last_point = point;
+	}
+
+	void draw_center()
+	{
+		double factual_x = 0;
+		double factual_y = 0;
+		int paint_x = (int)((x_bias) * scale + 0.5);
+		int paint_y = (int)((-(y_bias) * scale) + MAT_EDGE);
+		Point point(paint_x, paint_y);
+		circle(paint, point, (int)CENTER_POINT_RADIUS, ui_colors[3], (int)LINE_WIDTH);
 	}
 
 	void draw_scale()
@@ -201,6 +213,7 @@ protected:
 		LINE_WIDTH = MAT_EDGE / 1000;
 		TEXT_SIZE = MAT_EDGE / 2000;
 		POINT_RADIUS = MAT_EDGE / 3000;
+		CENTER_POINT_RADIUS = 10 * POINT_RADIUS;
 	}
 
 
@@ -283,6 +296,7 @@ protected:
 	bool is_first;
 	Matrix * e;
 public:
+	IMGSolutionFileOutput() = default;
 	IMGSolutionFileOutput(std::wstring fn, WindowSize size, XYZ * center = NULL, bool draw_line = false, double edge = 10000.0)
 	{
 		media = OutputMedia::OUT_DISK;
@@ -317,6 +331,7 @@ public:
 
 	virtual bool put_once(GNSSDataSet & set)
 	{
+		if (!set.solution_available()) return false;
 		if (center)
 		{
 			draw_point(set.current_solution, *center);
@@ -355,7 +370,9 @@ public:
 				draw_point(locs[i], mean_loc);
 			}
 		}
-
+		else {
+			draw_center();
+		}
 		unsigned len = filename.size() * 4;
 		setlocale(LC_CTYPE, "");
 		char *p = new char[len];
