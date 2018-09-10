@@ -46,6 +46,8 @@ protected:
 	XYZ sat_temp;
 	double ea[2];
 
+	double TEC;
+
 	//SatStatus satellite_summery[GNSS_SATELLITE_AMOUNT];
 
 	Matrix * Z;
@@ -103,11 +105,20 @@ protected:
 		if(set.ion_model.good() && set.solution_available())
 		{
 			// under construction
+
 		}
-		else if(set.tec.good() && set.solution_available())
+		else if(TEC != 0)
 		{
 			// under construction
 
+			if (obs_type == C1) {
+				double value = -40.3 * TEC / (FREQ1 * FREQ1 / 1E14);
+				observation[satellite_amount] += value;
+			}
+			else {
+				double value = -40.3 * TEC / (FREQ2 * FREQ2 / 1E14);
+				observation[satellite_amount] += value;
+			}
 		}
 
 		satellite_amount ++;
@@ -179,6 +190,18 @@ protected:
 
 	void fetch_available(GNSSDataSet & set, GPSTime * pre)
 	{
+		// tec ion
+		if (set.solution_available() && set.tec.good(pre)) {
+			BLH location;
+			set.current_solution.toBLH(&location);
+			// primary solution : find the nearest point.
+			int col = round((SpaceTool::get_deg(location.L) - set.tec.col_start) / set.tec.col_step);
+			int row = round((SpaceTool::get_deg(location.B) - set.tec.row_start) / set.tec.row_step);
+
+			TEC = set.tec.data->data[row][col];
+		}
+		else TEC = 0;
+
 		satellite_amount = 0;
 		for(int i = 1; i < GNSS_SATELLITE_AMOUNT; i++)
 		{
@@ -194,7 +217,7 @@ protected:
 					if(set.current_solution.X != 0)
 					{
 						SpaceTool::elevation_and_azimuth(&sat_temp, &set.current_solution, ea);
-						if(SpaceTool::get_arc(ea[0]) < 10)
+						if(SpaceTool::get_deg(ea[0]) < 10)
 							continue;
 					}
 
@@ -217,6 +240,7 @@ public:
 		memset(observation,        0, sizeof(double) * GNSS_SATELLITE_AMOUNT);
 		sat_temp = { 0, 0 }; ea[0] = ea[1] = 0.0;
 		satellite_amount = 0;
+		TEC = 0;
 	}
 
 	virtual bool execute(GNSSDataSet & set)
@@ -238,6 +262,8 @@ public:
 class SimpleKinematicSolver : public SimpleSolver{
 private:
 	double DeltaT;
+	double const_var_z = 0.01;
+	double const_var_p = 1;
 protected:
 	//Matrix * X;//X Vx Ax Y Vy Ay Z Vz Az T dT
 	Matrix * Xp;
@@ -335,7 +361,7 @@ protected:
 		for (int i = 0; i < satellite_amount; i++)
 		{
 			Z->data[i][0] = observation[i];
-			Dz->data[i][i] = 3;
+			Dz->data[i][i] = const_var_z;
 
 			H->data[i][0] = -DX0[i] / S[i];
 			H->data[i][3] = -DY0[i] / S[i];
@@ -425,7 +451,11 @@ public:
 
 		T->data[9][3] = ttd2; T->data[10][3] = DeltaT;
 
-		De = eyes(4);De->data[0][0] = 1; De->data[1][1] = 1; De->data[2][2] = 1; De->data[3][3] = 1;
+		De = eyes(4);
+		De->data[0][0] = const_var_p; 
+		De->data[1][1] = const_var_p; 
+		De->data[2][2] = const_var_p; 
+		De->data[3][3] = const_var_p;
 
 		mat_trans(F, Ft); mat_trans(T, Tt);
 	}
@@ -489,9 +519,9 @@ protected:
 			delta = lamda * (obs.values[phase] - last_phase[index]);
 			f1 = obs.values[obs_type] / period_counter;
 			f2 = last_observation[index] + delta;
-			f3 = (period_counter - 1) / period_counter * f2;
+			f3 = (period_counter - 1.0) / period_counter * f2;
 
-			obs.values[phase] = f1 + f3;
+			obs.values[obs_type] = f1 + f3;
 		}
 		
 		last_observation[index] = obs.values[obs_type];

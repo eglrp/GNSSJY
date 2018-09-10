@@ -183,6 +183,11 @@ struct TECMap: public checkable{
 	double col_step;
 	double row_start;
 	double col_start;
+
+	bool good(GPSTime * t)
+	{
+		return t->minus(&GPSTime(fresh_time)) < 7200;
+	}
 };
 
 struct IONModel: public checkable{

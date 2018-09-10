@@ -267,6 +267,7 @@ public:
 				fscanf(fp, "\n");
 				fgets(line_buffer, 100, fp); // LAT/LON1/LON2/DLON/H and // END OF TEC MAP
 			}
+			map->check(true);
 		}
 
 		return true;

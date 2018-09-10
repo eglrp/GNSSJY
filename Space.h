@@ -95,9 +95,13 @@ struct XYZ{
 
 class SpaceTool{
 public:
+	static double get_deg(double arc)
+	{
+		return arc / PI * 180;
+	}
 	static double get_arc(double deg)
 	{
-		return deg * 180.0 / PI;
+		return deg / 180.0 * PI;
 	}
 	static double get_atan(double z, double y)
 	{
