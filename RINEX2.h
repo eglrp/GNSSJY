@@ -88,6 +88,8 @@ struct RinexIonFileHeader : public RinexFileHeader{
 	int exponent;
 };
 
+
+
 class RINEXIonosphereFileInput: public FileInput, public IonosphereInput, public RINEX2Input{
 private:
 	RinexIonFileHeader header;

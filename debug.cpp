@@ -25,7 +25,6 @@ int main()
 		10000
 	);
 	outputt.reserve(10000);
-
 	TXTSolutionFileOutput output2(L"bjfs2500.sln.txt");
 	
 

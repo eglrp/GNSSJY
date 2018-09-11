@@ -1,8 +1,10 @@
 #pragma once
 #include <stdlib.h>
 #include <string.h>
+#include "RTCM3.h"
 #include "Space.h"
 #include "JTime.h"
+
 //#include "RINEX2.h"
 #define MAX_OBSER_TYPE 9
 #define GNSS_SATELLITE_AMOUNT 150
@@ -208,6 +210,9 @@ struct GNSSDataSet{
 	// ion
 	TECMap      tec;
 	IONModel    ion_model;
+
+	//differential
+	RTCMMessage diff;
 
 
 	// passing-on

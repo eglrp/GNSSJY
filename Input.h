@@ -30,6 +30,7 @@ enum InputUsage{
 	IN_OBSERVATION,
 	IN_NAVIGATION,
 	IN_IONOSPHERE,
+	IN_DIFFERENTIAL,
 
 	IN_PRECISE_ORBIT,
 	IN_EARTH_ROTATION,
@@ -96,12 +97,26 @@ public:
 	virtual bool try_once(TECMap * map, UTC * time) = 0;
 };
 
+class TCPInput : public virtual Input {
+protected:
+public:
+};
+
+class DifferentialInput : public virtual Input {
+protected:
+public:
+};
+
+class RTCM3Input : public virtual Input {
+protected:
+public:
+};
+
 class RINEX2Input: public virtual Input{
 protected:
 	char line_buffer[100];
 	virtual bool parse_header() = 0;
 	virtual int parse_header_line(const char * content, const char * title) = 0;
 public:
-
 
 };
