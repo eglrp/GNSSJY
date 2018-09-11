@@ -1,8 +1,10 @@
 #pragma once
 #include "MatC.h"
 #include "DataStore.h"
+
 #include "RINEX2.h"
 #include "ProblemDef.h"
+
 
 enum SolverType
 {
@@ -195,8 +197,8 @@ protected:
 			BLH location;
 			set.current_solution.toBLH(&location);
 			// primary solution : find the nearest point.
-			int col = round((SpaceTool::get_deg(location.L) - set.tec.col_start) / set.tec.col_step);
-			int row = round((SpaceTool::get_deg(location.B) - set.tec.row_start) / set.tec.row_step);
+			int col = (int)round((SpaceTool::get_deg(location.L) - set.tec.col_start) / set.tec.col_step);
+			int row = (int)round((SpaceTool::get_deg(location.B) - set.tec.row_start) / set.tec.row_step);
 
 			TEC = set.tec.data->data[row][col];
 		}

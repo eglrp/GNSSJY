@@ -43,6 +43,7 @@ struct UTC {
 	int minute;
 	int sec;
 
+	bool equals(UTC * obj);
 	int get_doy();
 	static UTC current_lc();
 	static UTC current_utc();

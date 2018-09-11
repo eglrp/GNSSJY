@@ -13,24 +13,24 @@
 int main()
 {
 	GNSSDataSet dataset;
-	RINEX2ObservationFileInput inputo(L"bjfs2500.18o");
-	RINEX2NavigationFileInput  inputn(L"bjfs2500.18n");
+	RINEX2ObservationFileInput inputo(L"bjfs1960.18o");
+	RINEX2NavigationFileInput  inputn(L"bjfs1960.18n");
 	//RINEXIonosphereFileInput   inputi(L"whug1960.18i", &dataset.tec);
 	dataset.sta = inputo.get_sta();
 	
 	IMGSolutionFileOutput outputt(
-		L"bjfs2500.sln.bmp", SIZE_100M, 
+		L"bjfs1960.sln.bmp", SIZE_10M, 
 		dataset.sta->approx_position.X == 0 ? NULL : &dataset.sta->approx_position, 
-		true,
+		false,
 		10000
 	);
 	outputt.reserve(10000);
-	TXTSolutionFileOutput output2(L"bjfs2500.sln.txt");
+	TXTSolutionFileOutput output2(L"bjfs1960.sln.txt");
 	
 
-	SimpleSmoothedSolver solver(inputo.get_interval());
+	//SimpleSmoothedSolver solver(inputo.get_interval());
 	//SimpleKinematicSolver solver(inputo.get_interval());
-	//SimpleSolver solver;
+	SimpleSolver solver;
 
 	//GPSTime pre = GPSTime(dataset.obs_time);
 	int epoch_counter = 0;

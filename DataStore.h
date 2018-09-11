@@ -1,11 +1,12 @@
 #pragma once
 #include <stdlib.h>
 #include <string.h>
-#include "RTCM3.h"
+
 #include "Space.h"
 #include "JTime.h"
 
 //#include "RINEX2.h"
+//#include "RTCM3.h"
 #define MAX_OBSER_TYPE 9
 #define GNSS_SATELLITE_AMOUNT 150
 
@@ -23,6 +24,30 @@
 
 enum TYPE_OF_RINEX_OBS {
 	L1 = 0, L2 = 1, P1 = 2, P2 = 3, C1 = 4, C2 = 5, S1 = 6, S2 = 7, D1 = 8
+};
+
+struct RTCMMessageHeader			//RTCM 消息头部结构体。
+{
+	short message_type;				//消息类型。 most used : 0x01 /*差分数据*/。
+	short station_id;				//基准站id。 most used : 0x00 /*第一基准站*/。
+	double z_count;					//z计数，用于该（差分）消息对齐GPS观测的时间。 this == data_gps_time.second % 3600/*SECOFHOUR*/。
+	short nos;						//not used yet
+	short mslength;					//帧长，单位为RTCM字。 length_of_whole_message = this + 2/*消息头的字数*/。
+	short health;					//健康状况。 most used : 0x00 /*健康*/。
+};
+struct RTCMMessageFrame {			//RTCM 单颗卫星差分数据结构体。
+	unsigned short int s;			//s can be 0 or 1 only.
+	unsigned short int udre;		//udre
+	unsigned short int prn;			//satellite_id
+	double  psrcorrection;			//伪距改正值
+	double  rvcorrection;			//速度改正值
+	short int ageofdata;			//ageofdata, 只有当sat.eph.IDOE == sat.diff.ageofdata时才可使用该结构中的数据用于差分。
+	double tick_time;
+};
+struct RTCMDiffMessage {			//RTCM 差分数据消息结构体。
+	RTCMMessageHeader header;		//消息头
+	int satellite_amount;			//卫星数
+	RTCMMessageFrame * frames;		//差分数据数组
 };
 
 struct StationInfo{
@@ -197,6 +222,11 @@ struct IONModel: public checkable{
 	double beta[4];
 };
 
+struct PreciseOrbitObserved {
+	XYZ value;
+	double clk; // microsec
+};
+
 struct GNSSDataSet{
 	UTC obs_time;
 	double To; // for reciever clock bias
@@ -212,7 +242,7 @@ struct GNSSDataSet{
 	IONModel    ion_model;
 
 	//differential
-	RTCMMessage diff;
+	RTCMDiffMessage diff;
 
 
 	// passing-on

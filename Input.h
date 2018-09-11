@@ -4,9 +4,9 @@
 
 
 #include <string>
-
-#include "DataStore.h"
 #include "JTime.h"
+#include "DataStore.h"
+
 using std::wstring;
 
 enum InputMedia
@@ -22,6 +22,7 @@ enum InputProtocol{
 	IN_RINEX2,
 	IN_RINEX3,
 	IN_RTCM3,
+	IN_SP3,
 	IN_NOVATEL3,
 	IN_PRUNKNOWN,
 };
@@ -72,10 +73,17 @@ protected:
 	FILE * fp;
 
 public:
-	virtual bool is_valid() = 0;
 };
-
-
+class PreciseOrbitInput : public virtual Input {
+protected:
+public:
+	virtual bool try_once(PreciseOrbitObserved * obs, UTC * time) = 0;
+};
+class SP3Input : public virtual Input {
+protected:
+public:
+	
+};
 class ObservationInput: public virtual Input{
 protected:
 

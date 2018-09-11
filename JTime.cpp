@@ -65,6 +65,19 @@ void UTC::change_to_doy(int doy)
 	}
 	throw "something wrong with the function change_to_doy";
 }
+
+bool UTC::equals(UTC * obj)
+{
+	if (sec == obj->sec)
+		if (minute == obj->minute)
+			if (hour = obj->hour)
+				if (date == obj->date)
+					if (month == obj->month)
+						if (year == obj->year)
+							return true;
+	return false;
+}
+
 UTC UTC::offset_hour(int h)
 {
 	UTC total(year, month, date, hour, minute, sec);

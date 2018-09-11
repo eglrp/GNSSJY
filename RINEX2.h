@@ -2,7 +2,7 @@
 #include <ostream>
 #include <fstream>
 
-
+#include "DataStore.h"
 #include "Solver.h"
 #include "Input.h"
 #include "Output.h"
@@ -256,7 +256,7 @@ public:
 				&sec
 			);
 			map->fresh_time.sec = (int)round(sec);
-			map->fresh_time.year -= map->fresh_time.year > 2000 ? 2000 : 1900;
+			map->fresh_time.year -= map->fresh_time.year >= 2000 ? 2000 : 1900;
 
 			fgets(line_buffer, 100, fp); // LAT/LON1/LON2/DLON/H
 
@@ -602,7 +602,7 @@ public:
 		return (StationInfo*) &header;
 	}
 
-	bool get_once(Observation * obs, UTC * time)
+	virtual bool get_once(Observation * obs, UTC * time)
 	{
 
 		if(feof(fp))throw FILE_END_REACHED;
