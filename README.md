@@ -22,3 +22,7 @@ I took a class today and haven't done very much, but I managed to finish the sp3
 # PLANS FOR THIS WEEK
 I'll try DGPS interface first and then try some linear-combined observation methods this week.
 I planed to use a wide lane which I never tried before.
+###### 9-12
+I set a new class file DIYSolver, which is to test the behavior of some PPP method. \
+Currently it doesn't work very well, DO NOT compile it with other code and DO NOT laugh at me :)\
+Or try to hold that.
