@@ -15,7 +15,10 @@ An image printing function has been added to the Output modules. See Output.h to
 Now I'm trying to make the program have the ability to deal with ion & tro.  
      You can find an IONEX reader in RINEX2.h. 
 ###### 9-10 
-I thought I can do ION corroection with ionex, but it turned out to be a little difficult. \
+I thought I can do ION correction with ionex, but it turned out to be a little difficult. \
 Accomplished the interface of RTCM3 Differ, wait for testing.
-# PLANS
-I'll try DGPS interface first and then try linear-combined observation method this week.
+###### 9-11
+I took a class today and haven't done very much, but I managed to finish the sp3 file reading which is the most easy one
+# PLANS FOR THIS WEEK
+I'll try DGPS interface first and then try some linear-combined observation methods this week.
+I planed to use a wide lane which I never tried before.
