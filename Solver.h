@@ -112,15 +112,6 @@ protected:
 		else if(TEC != 0)
 		{
 			// under construction
-
-			if (obs_type == C1) {
-				double value = -40.3 * TEC / (FREQ1 * FREQ1 / 1E14);
-				observation[satellite_amount] += value;
-			}
-			else {
-				double value = -40.3 * TEC / (FREQ2 * FREQ2 / 1E14);
-				observation[satellite_amount] += value;
-			}
 		}
 
 		satellite_amount ++;

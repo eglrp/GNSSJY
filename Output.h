@@ -369,6 +369,7 @@ public:
 			{
 				draw_point(locs[i], mean_loc);
 			}
+			draw_center();
 		}
 		else {
 			draw_center();
