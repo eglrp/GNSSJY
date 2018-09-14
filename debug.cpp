@@ -20,8 +20,8 @@ int main()
 	
 	IMGSolutionFileOutput outputt(
 		L"bjfs2500D.sln.bmp", SIZE_100M, 
-		//dataset.sta->approx_position.X == 0 ? NULL : &dataset.sta->approx_position, 
-		NULL,
+		dataset.sta->approx_position.X == 0 ? NULL : &dataset.sta->approx_position, 
+		//NULL,
 		false,
 		10000
 	);
@@ -35,11 +35,16 @@ int main()
 	DIYSolver solverd;
 	SimpleSolver solver;
 	//GPSTime pre = GPSTime(dataset.obs_time);
+	//for (int i = 0; i < 100; i++)
+	//{
+	//	inputo.get_once(dataset.obs, &dataset.obs_time);
+	//	inputn.try_once(dataset.nav, &dataset.obs_time);
+	//}
 	int epoch_counter = 0;
 	
 	try {
-		//while (true)
-		for(int i = 0; i < 100; i++)
+		while (true)
+		//for(int i = 0; i < 100; i++)
 		{
 			inputo.get_once( dataset.obs, &dataset.obs_time);
 			inputn.try_once( dataset.nav, &dataset.obs_time);
@@ -49,12 +54,13 @@ int main()
 			//outputt.put_once(dataset);
 			//output2.put_once(dataset);
 
-			solverd.execute(dataset);
+			if (solver.execute(dataset)) {
 
-			outputt.put_once(dataset);
-			output2.put_once(dataset);
+				outputt.put_once(dataset);
+				output2.put_once(dataset);
 
-			epoch_counter++;
+				epoch_counter++;
+			}
 		}
 	}
 	catch (MyError error_code)

@@ -145,12 +145,12 @@ protected:
 			{
 				D->data[j][j] = 0.001;
 				//设置观测矩阵Z,Zi = Pi - P0i,P0i = Dis(X0,Si)+To
-				Z->data[j][0] = observation[j] - S[j] - To;
+				Z->data[j][0] = observation[j] - S[j];
 				//设置系数矩阵
 				H->data[j][0] = -DX0[j] / S[j];
 				H->data[j][1] = -DY0[j] / S[j];
 				H->data[j][2] = -DZ0[j] / S[j];
-				H->data[j][3] = 1;
+				H->data[j][3] = LIGHT_SPEED;
 			}
 
 			// 天地大同

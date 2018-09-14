@@ -1,85 +1,197 @@
 ﻿#pragma once
 #include "Solver.h"
 
-class DIYSolver : public SimpleSolver {
+enum STAGE {
+	INIT,
+	SEQU,
+};
 
-	// 此类用来进行不同形式的GNSS 解算对结果所造成的影响，不属于正常程序的一部分，后期会移除。
-	// 第一版本的内容包括：
-	// 1. 无电离层组合的结果。涉及到的输出自己解决并不依靠Output接口。
-	// 2. 宽窄巷法解算浮点模糊度的解以及固定收敛的情况。
-	// 3. 模糊度改正后载波相位观测的解
-	// 4. 基于高次差法的周跳检测
-	// 4. 多历元共同求解的测相伪距绝对定位法。
+class DIYSolver : public SimpleSolver {
+	STAGE stage;
+	int PRN[GNSS_SATELLITE_AMOUNT];
+	int LAST_PRN[GNSS_SATELLITE_AMOUNT];
+	int last_satellite_amount;
+
+	int init_epoch;
+	int required_init_epoch;
+
+	int init_obs_num;
+	XYZ init_sat_loc[GNSS_SATELLITE_AMOUNT];
+	double init_obs[GNSS_SATELLITE_AMOUNT];
+	int init_num_of_param;
+
+	double lambdaL1;
+
+	double N[GNSS_SATELLITE_AMOUNT];
+
+	void reset_satellite()
+	{
+		last_satellite_amount = satellite_amount;
+		memcpy(LAST_PRN, PRN, sizeof(int) * GNSS_SATELLITE_AMOUNT);
+	}
+
+	bool satellite_status_changed()
+	{
+		if (satellite_amount != last_satellite_amount)
+		{
+			reset_satellite();
+			return true;
+		}
+		for (int i = 0; i < satellite_amount; i++)
+			if (PRN[i] != LAST_PRN[i])
+			{
+				reset_satellite();
+				return true;
+			}
+		reset_satellite();
+		return false;
+	}
+
 public:
 	DIYSolver(): SimpleSolver() {
-		f12 = FREQ1 * FREQ1;
-		f22 = FREQ2 * FREQ2;
-		f12_f22 = FREQ1 * FREQ1 - FREQ2 * FREQ2;
-
-		double l1G = 1.57542;
-		double l2G = 1.22760;
-
-		//double t1 = f12 / f12_f22;
-		//double t2 = f22 / f12_f22;
-		f12df12_f22 = (l1G * l1G) / (l1G * l1G - l2G * l2G);
-		f22df12_f22 = (l2G * l2G) / (l1G * l1G - l2G * l2G);
-
-		f1mf1_f2 = FREQ1 / (FREQ1 - FREQ2);
-		f2mf1_f2 = FREQ2 / (FREQ1 - FREQ2);
-
-		f1mf1pf2 = FREQ1 / (FREQ1 + FREQ2);
-		f2mf1pf2 = FREQ2 / (FREQ1 + FREQ2);
-
-		lambda1 = LIGHT_SPEED / FREQ1;
-		lambda2 = LIGHT_SPEED / FREQ2;
-
-		if ((solution2 = fopen("SOLUTION2.txt", "w")) == NULL) throw LACK_OF_ACCESS;
-		if ((solution1 = fopen("SOLUTION1.txt", "w")) == NULL) throw LACK_OF_ACCESS;
-		if ((amb1      = fopen("AMB1.txt",      "w")) == NULL) throw LACK_OF_ACCESS;
-		if ((amb2      = fopen("AMB2.txt",      "w")) == NULL) throw LACK_OF_ACCESS;
-
-		period_counter = 0;
-		is_first = true;
+		stage = INIT;
+		init_epoch = 0;
+		required_init_epoch = 4;
+		init_obs_num = 0;
+		init_num_of_param = 0;
+		lambdaL1 = LIGHT_SPEED / FREQ1;
 	}
 
 	virtual bool execute(GNSSDataSet & set)
 	{
 		GPSTime * pre = &GPSTime(set.obs_time);
-		// firstly, calculate the positions of all available satellites
-		fetch_available(set, pre);
-		if (satellite_amount <= 3) return false;
 
+		fetch_available(set, pre);
+		if (satellite_status_changed() || satellite_amount < 4) {
+			stage = INIT;
+			init_epoch = 0;
+			init_obs_num = 0;
+			return false;
+		}
+
+		if (stage == INIT)
+		{
+			memcpy(init_sat_loc + init_obs_num, satellite_position, sizeof(XYZ)    * satellite_amount);
+			memcpy(init_obs     + init_obs_num,        observation, sizeof(double) * satellite_amount);
+			init_obs_num += satellite_amount;
+			init_epoch++;
+			if (init_epoch == required_init_epoch)
+			{
+				init_num_of_param = satellite_amount + 3 + required_init_epoch;
+				if (init_num_of_param > init_obs_num) throw UNEXPECTED;
+				stage = SEQU;
+				get_init_solution(&set.current_solution, set.To);
+				
+				//stage = INIT;
+				init_epoch = 0;
+				init_obs_num = 0;
+				return true;
+			}
+			
+			return false;
+		}
 
 		get_static_solution(&set.current_solution, set.To);
 
-		fprintf(solution1, "%lf\t%lf\t%lf\t%lf\n", set.current_solution.X, set.current_solution.Y, set.current_solution.Z, set.To);
-		period_counter++;
-		for (int i = 0; i < GNSS_SATELLITE_AMOUNT; i++)
-		{
-			fprintf(amb1, "%lf\t", ambiguity_l1[i]);
-			fprintf(amb2, "%lf\t", ambiguity_l2[i]);
-		}
-		fprintf(amb1, "\n");
-		fprintf(amb2, "\n");
-		is_first = false;
 		return true;
 	}
 
 protected:
-	TYPE_OF_RINEX_OBS used[4] = { L1, C1, L2, P2 };
+#define NUM_OF_OBS 1
+	TYPE_OF_RINEX_OBS used[NUM_OF_OBS] = { L1 };
+
+	bool get_init_solution(XYZ * current_solution, double & To)
+	{
+		XYZ before = { -2148744.5566 , 4426641.1140 , 4044655.7555 };
+		Matrix * T = malloc_mat(required_init_epoch, 1);
+
+		//mat_output(T, "T");
+		Z = malloc_mat(init_obs_num, 1);
+		H = malloc_mat(init_obs_num, init_num_of_param);
+		D = malloc_mat(init_obs_num, init_obs_num);
+		V = malloc_mat(init_obs_num, 1);
+		Sig = malloc_mat(init_num_of_param, init_num_of_param);
+		X = malloc_mat(init_num_of_param, 1);
+
+		for (int i = 0; i < 20; i++)
+		{
+			for (int j = 0; j < init_obs_num; j++)
+			{
+				S[j] = current_solution->distance_towards(&init_sat_loc[j]);
+				DX0[j] = init_sat_loc[j].X - current_solution->X;
+				DY0[j] = init_sat_loc[j].Y - current_solution->Y;
+				DZ0[j] = init_sat_loc[j].Z - current_solution->Z;
+			}
+
+			for (int j = 0; j < init_obs_num; j++)
+			{
+				D->data[j][j] = 0.1;
+				//设置观测矩阵Z,Zi = Pi - P0i,P0i = Dis(X0,Si)+To
+				Z->data[j][0] = init_obs[j] - S[j];// - T->data[j/satellite_amount][0] * LIGHT_SPEED;
+				//设置系数矩阵
+				H->data[j][0] = -DX0[j] / S[j];
+				H->data[j][1] = -DY0[j] / S[j];
+				H->data[j][2] = -DZ0[j] / S[j];
+				//H->data[j][3] = 1;
+			}
+
+			// for lambda and clock bias.
+			for (int j = 0; j < required_init_epoch; j++)
+			{
+				for (int k = 0; k < satellite_amount; k++)
+				{
+					H->data[j * satellite_amount + k][3 + k] = lambdaL1;
+					H->data[j * satellite_amount + k][3 + satellite_amount + j] = -LIGHT_SPEED;
+				}
+			}
+
+			//mat_output(H, "H");
+
+			// 天地大同
+			LMS(Z, H, D, X, Sig, V);
+
+			current_solution->X += X->data[0][0];
+			current_solution->Y += X->data[1][0];
+			current_solution->Z += X->data[2][0];
+			for (int j = 0; j < required_init_epoch; j++)
+			{
+				T->data[j][0] = X->data[3 + satellite_amount + j][0];
+			}
+			for (int j = 0; j < satellite_amount; j++)
+			{
+				N[PRN[j]] = X->data[3 + j][0];
+			}
+			//mat_output(T, "T");
+			for (int j = 0; j < 4; j++)printf("%.8lf\n", T->data[j][0] * LIGHT_SPEED);
+			for (int j = 0; j < satellite_amount; j++)printf("%.8lf\n", N[PRN[j]]);
+			//print_intermidiate();
+
+			if (before.distance_towards(current_solution) <= 0.00001) {
+				// job done
+				
+				
+				break;
+			}
+
+			memcpy(&before, current_solution, sizeof(XYZ));
+		}
+		//mat_output(X);
+		//print_intermidiate();
+		To += T->data[required_init_epoch - 1][0] * LIGHT_SPEED;//X->data[init_num_of_param - 1][0] * LIGHT_SPEED;
 
 
-	// 文件接口
-	FILE * solution1;
-	FILE * solution2;
-	FILE * amb1;
-	FILE * amb2;
+		free_mat(T);
+		free_mat(Z);
+		free_mat(H);
+		free_mat(D);
+		free_mat(X);
+		free_mat(Sig);
+		free_mat(V);
 
-	// 基本变量
-	double ambiguity_l1[GNSS_SATELLITE_AMOUNT];
-	double ambiguity_l2[GNSS_SATELLITE_AMOUNT];
-	//double obs[4][GNSS_SATELLITE_AMOUNT];
-	
+
+
+		return true;
+	}
 
 
 	void fetch_available(GNSSDataSet & set, GPSTime * pre)
@@ -87,10 +199,8 @@ protected:
 		satellite_amount = 0;
 		for (int i = 1; i < GNSS_SATELLITE_AMOUNT; i++)
 		{
-			ambiguity_l1[i] = 0;
-			ambiguity_l2[i] = 0;
 			bool b1 = set.nav[i].good();
-			bool b2 = set.obs[i].good(used, 4);
+			bool b2 = set.obs[i].good(used, NUM_OF_OBS);
 			if (b1 && b2)
 			{
 				if (set.nav[i].get_position(
@@ -117,135 +227,32 @@ protected:
 		}
 	}
 
-	// for IF
-	double f12;
-	double f22;
-	double f12_f22;
-	double f12df12_f22;
-	double f22df12_f22;
-
-	// for WL
-	double f1mf1_f2;
-	double f2mf1_f2;
-
-	// for nl
-	double f1mf1pf2;
-	double f2mf1pf2;
-
-	double lambda1, lambda2;
-
-
-	// smoothing
-	double last_P1[GNSS_SATELLITE_AMOUNT];
-	double last_P2[GNSS_SATELLITE_AMOUNT];
-	double last_L1[GNSS_SATELLITE_AMOUNT];
-	double last_L2[GNSS_SATELLITE_AMOUNT];
-
-	int period_counter;
-	bool is_first;
-
 	virtual bool pre_process(GPSTime * pre, GNSSDataSet & set, int index, XYZ * sat_loc)
 	{
 		Observation & obs = set.obs[index];
 		Broadcast  & nav = set.nav[index];
-		if(is_first)
-		{ 
-			double p = 0.5 * obs.values[C1] + 0.5 * f22df12_f22 * obs.values[P2];
-			double dtc = pre->minus(&nav.toc) - p / LIGHT_SPEED;
-			double s = nav.sv_clock_bias
-				+ nav.sv_clock_drift      * dtc
-				+ nav.sv_clock_drift_rate * dtc;
+		double p = obs.values[L1] * LIGHT_SPEED / FREQ1;
+		double dtc = pre->minus(&nav.toc) - p / LIGHT_SPEED;
+		double s = nav.sv_clock_bias
+			+ nav.sv_clock_drift      * dtc
+			+ nav.sv_clock_drift_rate * dtc;
 
-			double r = (R_1 * nav.eccentricity * sin(nav.Ek) * nav.sqrt_a);
+		double r = (R_1 * nav.eccentricity * sin(nav.Ek) * nav.sqrt_a);
 
-			observation[satellite_amount] = p + s * LIGHT_SPEED;//星钟差
-			observation[satellite_amount] -= r * LIGHT_SPEED; //相对论
-			observation[satellite_amount] -= nav.tgd * LIGHT_SPEED;//群延迟
+		observation[satellite_amount] = p + s * LIGHT_SPEED;//星钟差
+		observation[satellite_amount] -= r * LIGHT_SPEED; //相对论
+		observation[satellite_amount] -= nav.tgd * LIGHT_SPEED;//群延迟
 
 																   //地球自转改正
-			double dA = we * (observation[satellite_amount] / LIGHT_SPEED - s + r);
-			satellite_position[satellite_amount].X = sat_loc->X + sat_loc->Y * dA;
-			satellite_position[satellite_amount].Y = sat_loc->Y - sat_loc->X * dA;
-			satellite_position[satellite_amount].Z = sat_loc->Z;
-		}
-		else {
-			double delta = lambda1 * (obs.values[L1] - last_L1[index]);
-			double f1 = obs.values[C1] / period_counter;
-			double f2 = last_P1[index] + delta;
-			double f3 = (period_counter - 1.0) / period_counter * f2;
-			obs.values[C1] = f1 + f3;
+		double dA = we * (observation[satellite_amount] / LIGHT_SPEED - s + r);
+		satellite_position[satellite_amount].X = sat_loc->X + sat_loc->Y * dA;
+		satellite_position[satellite_amount].Y = sat_loc->Y - sat_loc->X * dA;
+		satellite_position[satellite_amount].Z = sat_loc->Z;
+		PRN[satellite_amount] = index;
 
-			delta = lambda2 * (obs.values[L2] - last_L2[index]);
-			f1 = obs.values[P2] / period_counter;
-			f2 = last_P2[index] + delta;
-			f3 = (period_counter - 1.0) / period_counter * f2;
-			obs.values[P2] = f1 + f3;
-			
-
-			double dtc = pre->minus(&nav.toc) - obs.values[C1] / LIGHT_SPEED;
-			double s = nav.sv_clock_bias
-				+ nav.sv_clock_drift      * dtc
-				+ nav.sv_clock_drift_rate * dtc;
-
-			double r = (R_1 * nav.eccentricity * sin(nav.Ek) * nav.sqrt_a);
-
-			observation[satellite_amount] = obs.values[C1] + s * LIGHT_SPEED;//星钟差
-			observation[satellite_amount] -= r * LIGHT_SPEED; //相对论
-			observation[satellite_amount] -= nav.tgd * LIGHT_SPEED;//群延迟
-
-			obs.values[C1] = observation[satellite_amount];
-
-			observation[satellite_amount] = obs.values[P2] + s * LIGHT_SPEED;//星钟差
-			observation[satellite_amount] -= r * LIGHT_SPEED; //相对论
-			observation[satellite_amount] -= nav.tgd * LIGHT_SPEED;//群延迟
-
-			obs.values[P2] = observation[satellite_amount];
-
-			observation[satellite_amount] = obs.values[L1] * lambda1 + s * LIGHT_SPEED;//星钟差
-			observation[satellite_amount] -= r * LIGHT_SPEED; //相对论
-			observation[satellite_amount] -= nav.tgd * LIGHT_SPEED;//群延迟
-
-			obs.values[L1] = observation[satellite_amount] / lambda1;
-
-			observation[satellite_amount] = obs.values[L2] * lambda2 + s * LIGHT_SPEED;//星钟差
-			observation[satellite_amount] -= r * LIGHT_SPEED; //相对论
-			observation[satellite_amount] -= nav.tgd * LIGHT_SPEED;//群延迟
-
-			obs.values[L2] = observation[satellite_amount] / lambda2;
-
-			//地球自转改正
-			double dA = we * (observation[satellite_amount] / LIGHT_SPEED - s + r);
-			satellite_position[satellite_amount].X = sat_loc->X + sat_loc->Y * dA;
-			satellite_position[satellite_amount].Y = sat_loc->Y - sat_loc->X * dA;
-			satellite_position[satellite_amount].Z = sat_loc->Z;
-
-
-			// 无电离层线性组合
-			double Pif = f12df12_f22 * obs.values[C1] - f22df12_f22 * obs.values[P2];
-
-			double Lif = f12df12_f22 * obs.values[L1] * lambda1 - f22df12_f22 * obs.values[L2] * lambda2;
-			double Pwl =
-				f1mf1_f2 * obs.values[C1] - f2mf1_f2 * obs.values[P2];
-			double Lwl =
-				f1mf1_f2 * obs.values[L1] * lambda1 - f2mf1_f2 * obs.values[L2] * lambda2;
-			double Pnl =
-				f1mf1pf2 * obs.values[C1] + f2mf1pf2 * obs.values[P2];
-			double Lnl =
-				f1mf1pf2 * obs.values[L1] * lambda1 + f2mf1pf2 * obs.values[L2] * lambda2;
-
-			ambiguity_l2[index] = (FREQ1 + FREQ2) / (2 * LIGHT_SPEED) * ((Lnl - Pnl) - (Lwl - Pwl));
-			ambiguity_l1[index] = (FREQ2 * 1.0 / FREQ1) * ambiguity_l2[index] + f12_f22 / (LIGHT_SPEED * FREQ1) * (Lif - Pif);
-
-			observation[satellite_amount] = Pif;
-		}
-
-		last_L1[index] = obs.values[L1];
-		last_P1[index] = obs.values[C1];
-		last_L2[index] = obs.values[L2];
-		last_P2[index] = obs.values[P2];
-
-
-
+		//模糊度
+		if(stage == SEQU)
+			observation[satellite_amount] += lambdaL1 * N[index];
 
 		satellite_amount++;
 		return true;
