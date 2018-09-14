@@ -29,4 +29,4 @@ Or try to hold that.
 ###### 9-14
 I tried to use batch least square method to solve float ambiguity of L1 and it worked.  \
 The result looks like splited lines, due to the fact that I used nothing for cycle-slips. \
-I will try sequencial LS and cycle-slip detector to get better results. \
+I will try sequence LS and cycle-slip detector to get better results. \
