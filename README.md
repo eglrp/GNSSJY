@@ -26,3 +26,7 @@ I planed to use a wide lane which I never tried before.
 I set a new class file DIYSolver, which is to test the behavior of some PPP method. \
 Currently it doesn't work very well, DO NOT compile it with other code and DO NOT laugh at me :)\
 Or try to hold that.
+###### 9-14
+I tried to use batch least square method to solve float ambiguity of L1 and it worked.  \
+The result looks like splited lines, due to the fact that I used nothing for cycle-slips. \
+I will try sequencial LS and cycle-slip detector to get better results. \
