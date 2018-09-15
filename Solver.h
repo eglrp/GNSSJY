@@ -124,12 +124,19 @@ protected:
 		XYZ before = {0, 0, 0};
 		memcpy(&before, current_solution, sizeof(XYZ));
 
-		Z = malloc_mat(satellite_amount, 1);
-		H = malloc_mat(satellite_amount, 4);
-		D = malloc_mat(satellite_amount, satellite_amount);
-		V = malloc_mat(satellite_amount, 1);
+		free_mat(Z);
+		free_mat(H);
+		free_mat(D);
+		free_mat(X);
+		free_mat(Sig);
+		free_mat(V);
+
+		Z   = malloc_mat(satellite_amount, 1);
+		H   = malloc_mat(satellite_amount, 4);
+		D   = malloc_mat(satellite_amount, satellite_amount);
+		V   = malloc_mat(satellite_amount, 1);
 		Sig = malloc_mat(4, 4);
-		X = malloc_mat(4, 1);
+		X   = malloc_mat(4, 1);
 
 		for(int i = 0;i < 20; i++)
 		{
@@ -145,12 +152,12 @@ protected:
 			{
 				D->data[j][j] = 0.001;
 				//设置观测矩阵Z,Zi = Pi - P0i,P0i = Dis(X0,Si)+To
-				Z->data[j][0] = observation[j] - S[j];
+				Z->data[j][0] = observation[j] - S[j] - To;
 				//设置系数矩阵
 				H->data[j][0] = -DX0[j] / S[j];
 				H->data[j][1] = -DY0[j] / S[j];
 				H->data[j][2] = -DZ0[j] / S[j];
-				H->data[j][3] = LIGHT_SPEED;
+				H->data[j][3] = 1;
 			}
 
 			// 天地大同
@@ -170,12 +177,7 @@ protected:
 			memcpy(&before, current_solution, sizeof(XYZ));
 		}
 
-		free_mat(Z);
-		free_mat(H);
-		free_mat(D);
-		free_mat(X);
-		free_mat(Sig);
-		free_mat(V);
+
 
 		return true;
 
@@ -579,6 +581,136 @@ public:
 		get_static_solution(&set.current_solution, set.To);
 
 		memcpy(&last_time, pre, sizeof(GPSTime));
+		return true;
+	}
+};
+
+
+class SequencedSimpleSolver : public SimpleSolver
+{
+protected:
+
+
+	Matrix * K;
+	Matrix * Q;
+	Matrix * W;
+	Matrix * h;
+	Matrix * w;
+	Matrix * z;
+	Matrix * x;
+
+	bool first;
+public:
+	SequencedSimpleSolver() : SimpleSolver()
+	{
+		X = malloc_mat(4, 1);
+		first = true;
+	}
+
+	virtual bool execute(GNSSDataSet & set)
+	{
+		GPSTime * pre = &GPSTime(set.obs_time);
+		fetch_available(set, pre);
+		if (satellite_amount <= 3) return false;
+		if (first)
+		{
+			get_static_solution(&set.current_solution, set.To);
+			W = eyes(satellite_amount);
+			H = malloc_mat(satellite_amount, 4);
+			X = malloc_mat(4, 1);
+			first = false;
+		}
+		else get_sequenced_solution(&set.current_solution, set.To);
+		return true;
+	}
+
+	virtual bool get_sequenced_solution(XYZ * current_solution, double & To)
+	{
+		XYZ before = { 0, 0, 0 };
+		//memcpy(&before, current_solution, sizeof(XYZ));
+
+		z   = malloc_mat(satellite_amount,                1);
+		h   = malloc_mat(satellite_amount,                4);
+		w   = malloc_mat(satellite_amount, satellite_amount);
+		x   = malloc_mat(               4,                1);
+
+		for (int i = 0; i < 20; i++)
+		{
+			for (int j = 0; j < satellite_amount; j++)
+			{
+				S[j] = current_solution->distance_towards(&satellite_position[j]);
+				DX0[j] = satellite_position[j].X - current_solution->X;
+				DY0[j] = satellite_position[j].Y - current_solution->Y;
+				DZ0[j] = satellite_position[j].Z - current_solution->Z;
+			}
+
+			for (int j = 0; j < satellite_amount; j++)
+			{
+				w->data[j][j] = 1;
+				z->data[j][0] = observation[j] - S[j] - To;
+				h->data[j][0] = -DX0[j] / S[j];
+				h->data[j][1] = -DY0[j] / S[j];
+				h->data[j][2] = -DZ0[j] / S[j];
+				h->data[j][3] = 1;
+			}
+			Matrix * temp1 = NULL, *temp2 = NULL, * Ht = NULL, * ht = NULL, * temp3 = NULL;
+			Matrix * dz = NULL, * Qinv = NULL;
+
+			mat_trans   (    H,    Ht       );
+			mat_multiply(   Ht,     W, temp1);
+			mat_multiply(temp1,     H, temp2);  // HWH
+			mat_trans   (    h,    ht       );
+			mat_multiply(   ht,     w, temp1);
+
+			mat_multiply(temp1,     h, temp3);  // hwh
+
+			mat_addition(temp2, temp3,  Qinv);
+			mat_inv(Qinv, Q);
+
+			mat_multiply(    Q,    ht, temp1);
+			mat_multiply(temp1,     w,     K); // Qhw
+			mat_multiply(    h,     X, temp1); // hX
+			mat_minus   (    z, temp1,    dz); // z - hX
+			mat_multiply(    K,    dz, temp1);
+			mat_addition(temp1,     X,     x);
+
+
+
+			free_mat(dz);
+			free_mat(temp1);
+			free_mat(temp2);
+			free_mat(temp3);
+			free_mat(ht);
+			free_mat(Ht);
+			free_mat(Qinv);
+
+
+			current_solution->X += x->data[0][0];
+			current_solution->Y += x->data[1][0];
+			current_solution->Z += x->data[2][0];
+			To += x->data[3][0];
+
+			if (before.distance_towards(current_solution) <= 0.001) {
+
+				break;
+			}
+
+			memcpy(&before, current_solution, sizeof(XYZ));
+		}
+
+
+		free_mat( W );
+		free_mat( K );
+		free_mat(Q);
+		
+		free_mat( Z );
+		free_mat( H );
+		//free_mat( D );
+		free_mat( X );
+		H = h;
+		W = w;
+		X = x;
+
 		return true;
 	}
 };

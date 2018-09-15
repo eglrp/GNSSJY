@@ -115,6 +115,7 @@ public:
 enum WindowSize {
 	SIZE_100M,
 	SIZE_50M,
+	SIZE_20M,
 	SIZE_10M,
 	SIZE_5M,
 	SIZE_1M,
@@ -240,6 +241,15 @@ protected:
 			scales[2] = 20;
 			scales[1] = 10;
 			scales[0] = 5;
+			break;
+		case SIZE_20M:
+			factual_edge = 20;
+			scale = MAT_EDGE / (factual_edge + (factual_edge / 10));
+			x_bias = 10 + (factual_edge / 20);
+			y_bias = 10 + (factual_edge / 20);
+			scales[2] = 10;
+			scales[1] = 5;
+			scales[0] = 2;
 			break;
 		case SIZE_10M:
 			factual_edge = 10;

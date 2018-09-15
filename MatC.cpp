@@ -94,6 +94,18 @@ void mat_multiply(Matrix * M1, double num, Matrix *& out)
 		for (int j = 0;j < M1->cols;j++)
 			out->data[i][j] = M1->data[i][j] * num;
 }
+void mat_addition(Matrix * M1, Matrix * M2, Matrix *& out)
+{
+	if (out)free_mat(out);
+	out = malloc_mat(M1->rows, M2->cols);
+	for (int i = 0; i < M1->rows; i++)
+	{
+		for (int j = 0; j < M2->cols; j++)
+		{
+			out->data[i][j] = M1->data[i][j] + M2->data[i][j];
+		}
+	}
+}
 void mat_multiply(Matrix * M1, Matrix * M2, Matrix *& out)
 {
 	if (out)free_mat(out);

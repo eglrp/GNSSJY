@@ -6,9 +6,8 @@
 #include "DataStore.h"
 #include "RINEX2.h"
 #include "Output.h"
-#include "DIYSolver.h"
 #include "JTime.h"
-
+#include "DIYSolver.h"
 
 int main()
 {
@@ -19,7 +18,7 @@ int main()
 	dataset.sta = inputo.get_sta();
 	
 	IMGSolutionFileOutput outputt(
-		L"bjfs2500D.sln.bmp", SIZE_100M, 
+		L"bjfs2500D.sln.bmp", SIZE_20M, 
 		dataset.sta->approx_position.X == 0 ? NULL : &dataset.sta->approx_position, 
 		//NULL,
 		false,
@@ -32,27 +31,17 @@ int main()
 	//SimpleSmoothedSolver solver(inputo.get_interval());
 	//SimpleKinematicSolver solver(inputo.get_interval());
 
-	DIYSolver solverd;
-	SimpleSolver solver;
-	//GPSTime pre = GPSTime(dataset.obs_time);
-	//for (int i = 0; i < 100; i++)
-	//{
-	//	inputo.get_once(dataset.obs, &dataset.obs_time);
-	//	inputn.try_once(dataset.nav, &dataset.obs_time);
-	//}
+	//DIYSolver solverd;
+	SequencedSimpleSolver solver;
 	int epoch_counter = 0;
 	
 	try {
+
 		while (true)
 		//for(int i = 0; i < 100; i++)
 		{
 			inputo.get_once( dataset.obs, &dataset.obs_time);
 			inputn.try_once( dataset.nav, &dataset.obs_time);
-			//inputi.try_once(&dataset.tec, &dataset.obs_time);
-			//solver.execute(  dataset);
-			
-			//outputt.put_once(dataset);
-			//output2.put_once(dataset);
 
 			if (solver.execute(dataset)) {
 

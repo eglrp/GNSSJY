@@ -193,7 +193,7 @@ struct Observation: public checkable{
 	unsigned char LLI[MAX_OBSER_TYPE];             // optional
 	unsigned char signal_strength[MAX_OBSER_TYPE]; // optional
 
-	bool good(TYPE_OF_RINEX_OBS  types[], int num)
+	bool good(const TYPE_OF_RINEX_OBS  types[], int num)
 	{
 		if (available)
 		{

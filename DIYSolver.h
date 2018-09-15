@@ -7,6 +7,8 @@ enum STAGE {
 };
 
 class DIYSolver : public SimpleSolver {
+	Matrix * T;
+
 	STAGE stage;
 	int PRN[GNSS_SATELLITE_AMOUNT];
 	int LAST_PRN[GNSS_SATELLITE_AMOUNT];
@@ -23,6 +25,10 @@ class DIYSolver : public SimpleSolver {
 	double lambdaL1;
 
 	double N[GNSS_SATELLITE_AMOUNT];
+
+	FILE * fp;
+#define NUM_OF_OBS 2
+	TYPE_OF_RINEX_OBS used[NUM_OF_OBS] = { L1, C1 };
 
 	void reset_satellite()
 	{
@@ -51,12 +57,21 @@ public:
 	DIYSolver(): SimpleSolver() {
 		stage = INIT;
 		init_epoch = 0;
-		required_init_epoch = 4;
+		required_init_epoch = 5;
 		init_obs_num = 0;
 		init_num_of_param = 0;
 		lambdaL1 = LIGHT_SPEED / FREQ1;
+		memset(N, 0, sizeof(double) * GNSS_SATELLITE_AMOUNT);
+		fp = fopen("wamb1.txt", "w");
 	}
-
+	void print_amb()
+	{
+		for (int i = 0; i < GNSS_SATELLITE_AMOUNT; i++)
+		{
+			fprintf(fp, "%7.5lf ", N[i]);
+		}
+		fprintf(fp, "\n");
+	}
 	virtual bool execute(GNSSDataSet & set)
 	{
 		GPSTime * pre = &GPSTime(set.obs_time);
@@ -81,8 +96,8 @@ public:
 				if (init_num_of_param > init_obs_num) throw UNEXPECTED;
 				stage = SEQU;
 				get_init_solution(&set.current_solution, set.To);
-				
-				//stage = INIT;
+				print_amb();
+				stage = INIT;
 				init_epoch = 0;
 				init_obs_num = 0;
 				return true;
@@ -97,15 +112,10 @@ public:
 	}
 
 protected:
-#define NUM_OF_OBS 1
-	TYPE_OF_RINEX_OBS used[NUM_OF_OBS] = { L1 };
-
-	bool get_init_solution(XYZ * current_solution, double & To)
+	bool get_sequence_solution(XYZ * current_solution, double & To)
 	{
-		XYZ before = { -2148744.5566 , 4426641.1140 , 4044655.7555 };
-		Matrix * T = malloc_mat(required_init_epoch, 1);
+		XYZ before = *current_solution;
 
-		//mat_output(T, "T");
 		Z = malloc_mat(init_obs_num, 1);
 		H = malloc_mat(init_obs_num, init_num_of_param);
 		D = malloc_mat(init_obs_num, init_obs_num);
@@ -125,17 +135,13 @@ protected:
 
 			for (int j = 0; j < init_obs_num; j++)
 			{
-				D->data[j][j] = 0.1;
-				//设置观测矩阵Z,Zi = Pi - P0i,P0i = Dis(X0,Si)+To
-				Z->data[j][0] = init_obs[j] - S[j];// - T->data[j/satellite_amount][0] * LIGHT_SPEED;
-				//设置系数矩阵
+				D->data[j][j] = 0.01;
+				Z->data[j][0] = init_obs[j] - S[j];
 				H->data[j][0] = -DX0[j] / S[j];
 				H->data[j][1] = -DY0[j] / S[j];
 				H->data[j][2] = -DZ0[j] / S[j];
-				//H->data[j][3] = 1;
 			}
 
-			// for lambda and clock bias.
 			for (int j = 0; j < required_init_epoch; j++)
 			{
 				for (int k = 0; k < satellite_amount; k++)
@@ -145,9 +151,6 @@ protected:
 				}
 			}
 
-			//mat_output(H, "H");
-
-			// 天地大同
 			LMS(Z, H, D, X, Sig, V);
 
 			current_solution->X += X->data[0][0];
@@ -155,29 +158,96 @@ protected:
 			current_solution->Z += X->data[2][0];
 			for (int j = 0; j < required_init_epoch; j++)
 			{
-				T->data[j][0] = X->data[3 + satellite_amount + j][0];
+				T->data[j][0] += X->data[3 + satellite_amount + j][0];
 			}
 			for (int j = 0; j < satellite_amount; j++)
 			{
-				N[PRN[j]] = X->data[3 + j][0];
+				N[PRN[j]] += round(X->data[3 + j][0]);
 			}
-			//mat_output(T, "T");
-			for (int j = 0; j < 4; j++)printf("%.8lf\n", T->data[j][0] * LIGHT_SPEED);
-			for (int j = 0; j < satellite_amount; j++)printf("%.8lf\n", N[PRN[j]]);
-			//print_intermidiate();
 
 			if (before.distance_towards(current_solution) <= 0.00001) {
-				// job done
-				
-				
+
 				break;
 			}
 
 			memcpy(&before, current_solution, sizeof(XYZ));
 		}
-		//mat_output(X);
-		//print_intermidiate();
-		To += T->data[required_init_epoch - 1][0] * LIGHT_SPEED;//X->data[init_num_of_param - 1][0] * LIGHT_SPEED;
+
+
+		free_mat(T);
+		free_mat(Z);
+		free_mat(H);
+		free_mat(D);
+		free_mat(X);
+		free_mat(Sig);
+		free_mat(V);
+
+
+
+		return true;
+	}
+
+	bool get_init_solution(XYZ * current_solution, double & To)
+	{
+		XYZ before = { 0 , 0 , 0 };
+
+		T   = malloc_mat(required_init_epoch, 1);
+		Z   = malloc_mat(init_obs_num, 1);
+		H   = malloc_mat(init_obs_num, init_num_of_param);
+		D   = malloc_mat(init_obs_num, init_obs_num);
+		V   = malloc_mat(init_obs_num, 1);
+		Sig = malloc_mat(init_num_of_param, init_num_of_param);
+		X   = malloc_mat(init_num_of_param, 1);
+
+		for (int i = 0; i < 20; i++)
+		{
+			for (int j = 0; j < init_obs_num; j++)
+			{
+				S[j] = current_solution->distance_towards(&init_sat_loc[j]);
+				DX0[j] = init_sat_loc[j].X - current_solution->X;
+				DY0[j] = init_sat_loc[j].Y - current_solution->Y;
+				DZ0[j] = init_sat_loc[j].Z - current_solution->Z;
+			}
+
+			for (int j = 0; j < init_obs_num; j++)
+			{
+				D->data[j][j] = 0.001;
+				Z->data[j][0] = init_obs[j] - S[j];
+				H->data[j][0] = -DX0[j] / S[j];
+				H->data[j][1] = -DY0[j] / S[j];
+				H->data[j][2] = -DZ0[j] / S[j];
+			}
+
+			for (int j = 0; j < required_init_epoch; j++)
+			{
+				for (int k = 0; k < satellite_amount; k++)
+				{
+					H->data[j * satellite_amount + k][3 + k] = lambdaL1;
+					H->data[j * satellite_amount + k][3 + satellite_amount + j] = 1;
+				}
+			}
+
+			LMS(Z, H, D, X, Sig, V);
+
+			current_solution->X += X->data[0][0];
+			current_solution->Y += X->data[1][0];
+			current_solution->Z += X->data[2][0];
+			for (int j = 0; j < required_init_epoch; j++)
+			{
+				T->data[j][0] += X->data[3 + satellite_amount + j][0];
+			}
+			for (int j = 0; j < satellite_amount; j++)
+			{
+				N[PRN[j]] += (X->data[3 + j][0]);
+			}
+
+			if (before.distance_towards(current_solution) <= 0.01) {
+
+				break;
+			}
+
+			memcpy(&before, current_solution, sizeof(XYZ));
+		}
 
 
 		free_mat(T);
@@ -217,7 +287,6 @@ protected:
 							continue;
 					}
 
-					// make the typical corrections done
 					if (!pre_process(pre, set, i, &sat_temp))
 					{
 						continue;
@@ -230,30 +299,29 @@ protected:
 	virtual bool pre_process(GPSTime * pre, GNSSDataSet & set, int index, XYZ * sat_loc)
 	{
 		Observation & obs = set.obs[index];
-		Broadcast  & nav = set.nav[index];
-		double p = obs.values[L1] * LIGHT_SPEED / FREQ1;
-		double dtc = pre->minus(&nav.toc) - p / LIGHT_SPEED;
+		Broadcast  &  nav = set.nav[index];
+
+		double phase = obs.values[L1] * lambdaL1;
+		double code  = obs.values[C1] * lambdaL1;
+		
+		double dtc = pre->minus(&nav.toc) - code / LIGHT_SPEED;
 		double s = nav.sv_clock_bias
 			+ nav.sv_clock_drift      * dtc
 			+ nav.sv_clock_drift_rate * dtc;
 
 		double r = (R_1 * nav.eccentricity * sin(nav.Ek) * nav.sqrt_a);
 
-		observation[satellite_amount] = p + s * LIGHT_SPEED;//星钟差
-		observation[satellite_amount] -= r * LIGHT_SPEED; //相对论
-		observation[satellite_amount] -= nav.tgd * LIGHT_SPEED;//群延迟
+		observation[satellite_amount] =   code + s * LIGHT_SPEED; //星钟差
+		observation[satellite_amount] -=         r * LIGHT_SPEED; //相对论
+		observation[satellite_amount] -=   nav.tgd * LIGHT_SPEED; //群延迟
 
-																   //地球自转改正
+																  //地球自转改正
 		double dA = we * (observation[satellite_amount] / LIGHT_SPEED - s + r);
 		satellite_position[satellite_amount].X = sat_loc->X + sat_loc->Y * dA;
 		satellite_position[satellite_amount].Y = sat_loc->Y - sat_loc->X * dA;
 		satellite_position[satellite_amount].Z = sat_loc->Z;
+
 		PRN[satellite_amount] = index;
-
-		//模糊度
-		if(stage == SEQU)
-			observation[satellite_amount] += lambdaL1 * N[index];
-
 		satellite_amount++;
 		return true;
 	}
