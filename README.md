@@ -31,5 +31,5 @@ I tried to use batch least square method to solve float ambiguity of L1 and it w
 The result looks like splited lines, due to the fact that I used nothing for cycle-slips. \
 I will try sequence LS and cycle-slip detector to get better results. \
 Later afternoon today I finished the test of batch least square and it is still suffering. \
-sequence LS is applied for SPP and tomorrow I will work on PPP edition of Sequence LS.
+sequence LS is applied for SPP and tomorrow I will work on PPP edition of Sequence LS. \
 Also a new set of data file has been uploaded which is the one I'm currently using.
