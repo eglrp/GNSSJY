@@ -8,7 +8,7 @@
 //#include "RINEX2.h"
 //#include "RTCM3.h"
 #define MAX_OBSER_TYPE 9
-#define GNSS_SATELLITE_AMOUNT 150
+#define GNSS_SATELLITE_AMOUNT 100
 
 
 #define LIGHT_SPEED 299792458.0
@@ -239,9 +239,27 @@ struct PreciseOrbitObserved {
 	double clk; // microsec
 };
 
+struct SatelliteData{ 
+	XYZ position;
+	GPSTime time;
+
+	double ambiguity;
+
+	bool available(GPSTime *pre)
+	{
+		if (pre->week == time.week && pre->sec == time.sec)return true;
+		else return false;
+	}
+	SatelliteData()
+	{
+		position = { 0,0,0 };
+		time = { 0,0 };
+		ambiguity = 0;
+	}
+};
+
 struct GNSSDataSet{
 	UTC obs_time;
-	double To; // for reciever clock bias
 
 	// inputs
 	Broadcast nav[GNSS_SATELLITE_AMOUNT];
@@ -256,9 +274,12 @@ struct GNSSDataSet{
 	//differential
 	RTCMDiffMessage diff;
 
-
 	// passing-on
 	XYZ current_solution;
+	double To; // for reciever clock bias
+	double dtrop;// ztd
+	SatelliteData sats[GNSS_SATELLITE_AMOUNT];
+
 	bool solution_available()
 	{
 		return current_solution.X != 0;

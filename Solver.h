@@ -5,6 +5,7 @@
 #include "RINEX2.h"
 #include "ProblemDef.h"
 
+#include "Troposphere.h"
 
 enum SolverType
 {
@@ -59,6 +60,8 @@ protected:
 	Matrix * Sig;
 	Matrix * V;
 
+	SimpleTroposphereModel tro;
+
 	double S  [GNSS_SATELLITE_AMOUNT];
 	double DX0[GNSS_SATELLITE_AMOUNT];
 	double DY0[GNSS_SATELLITE_AMOUNT];
@@ -87,12 +90,14 @@ protected:
 	{
 		Observation & obs = set.obs[index];
 		Broadcast  & nav = set.nav[index];
+		SatelliteData & sat = set.sats[index];
 		double dtc = pre->minus(&nav.toc) - obs.values[obs_type] / LIGHT_SPEED;
 		double s =   nav.sv_clock_bias
 				   + nav.sv_clock_drift      * dtc
 				   + nav.sv_clock_drift_rate * dtc;
 
 		double r = (R_1 * nav.eccentricity * sin(nav.Ek) * nav.sqrt_a);
+		
 		observation[satellite_amount] = obs.values[obs_type] + s * LIGHT_SPEED;//星钟差
 		observation[satellite_amount] -= r * LIGHT_SPEED; //相对论
 		observation[satellite_amount] -= nav.tgd * LIGHT_SPEED;//群延迟
@@ -103,6 +108,14 @@ protected:
 		satellite_position[satellite_amount].Y = sat_loc->Y - sat_loc->X * dA;
 		satellite_position[satellite_amount].Z = sat_loc->Z;
 
+		memcpy(&sat.time,                                       pre, sizeof(GPSTime));
+		memcpy(&sat.position, &satellite_position[satellite_amount], sizeof(XYZ));
+
+		/*if (set.solution_available())
+		{
+			tro.set_parameters(set.current_solution, UTC(*pre).get_doy());
+			observation[satellite_amount] -= tro.get_overall_std(ea[0]);
+		}*/
 		// 电离层改正
 		if(set.ion_model.good() && set.solution_available())
 		{
@@ -183,7 +196,7 @@ protected:
 
 	}
 
-	void fetch_available(GNSSDataSet & set, GPSTime * pre)
+	virtual void fetch_available(GNSSDataSet & set, GPSTime * pre)
 	{
 		// tec ion
 		if (set.solution_available() && set.tec.good(pre)) {
@@ -200,6 +213,10 @@ protected:
 		satellite_amount = 0;
 		for(int i = 1; i < GNSS_SATELLITE_AMOUNT; i++)
 		{
+			if (i == 8)
+			{
+				int j = 0;
+			}
 			if(set.nav[i].good() && set.obs[i].good(obs_type))
 			{
 				if(set.nav[i].get_position(
@@ -236,6 +253,17 @@ public:
 		sat_temp = { 0, 0 }; ea[0] = ea[1] = 0.0;
 		satellite_amount = 0;
 		TEC = 0;
+
+		Z = NULL;
+		H = NULL;
+		D = NULL;
+		X = NULL;
+		Sig = NULL;
+		V = NULL;
+	}
+	int get_satellite_amount()
+	{
+		return satellite_amount;
 	}
 
 	virtual bool execute(GNSSDataSet & set)
@@ -590,7 +618,7 @@ class SequencedSimpleSolver : public SimpleSolver
 {
 protected:
 
-
+	//Matrix * Qpinv;
 	Matrix * K;
 	Matrix * Q;
 	Matrix * W;
@@ -599,113 +627,106 @@ protected:
 	Matrix * z;
 	Matrix * x;
 
-	bool first;
 public:
 	SequencedSimpleSolver() : SimpleSolver()
 	{
+		W = eyes(satellite_amount);
+		H = malloc_mat(satellite_amount, 4);
 		X = malloc_mat(4, 1);
-		first = true;
 	}
 
 	virtual bool execute(GNSSDataSet & set)
 	{
 		GPSTime * pre = &GPSTime(set.obs_time);
 		fetch_available(set, pre);
-		if (satellite_amount <= 3) return false;
-		if (first)
+		if (satellite_amount <= 0)
 		{
-			get_static_solution(&set.current_solution, set.To);
-			W = eyes(satellite_amount);
-			H = malloc_mat(satellite_amount, 4);
-			X = malloc_mat(4, 1);
-			first = false;
+			return false;	
 		}
-		else get_sequenced_solution(&set.current_solution, set.To);
+		get_sequenced_solution(&set.current_solution, set.To);
 		return true;
 	}
 
 	virtual bool get_sequenced_solution(XYZ * current_solution, double & To)
 	{
 		XYZ before = { 0, 0, 0 };
-		//memcpy(&before, current_solution, sizeof(XYZ));
 
 		z   = malloc_mat(satellite_amount,                1);
 		h   = malloc_mat(satellite_amount,                4);
 		w   = malloc_mat(satellite_amount, satellite_amount);
 		x   = malloc_mat(               4,                1);
 
-		for (int i = 0; i < 20; i++)
+		for (int j = 0; j < satellite_amount; j++)
 		{
-			for (int j = 0; j < satellite_amount; j++)
-			{
-				S[j] = current_solution->distance_towards(&satellite_position[j]);
-				DX0[j] = satellite_position[j].X - current_solution->X;
-				DY0[j] = satellite_position[j].Y - current_solution->Y;
-				DZ0[j] = satellite_position[j].Z - current_solution->Z;
-			}
-
-			for (int j = 0; j < satellite_amount; j++)
-			{
-				w->data[j][j] = 1;
-				z->data[j][0] = observation[j] - S[j] - To;
-				h->data[j][0] = -DX0[j] / S[j];
-				h->data[j][1] = -DY0[j] / S[j];
-				h->data[j][2] = -DZ0[j] / S[j];
-				h->data[j][3] = 1;
-			}
-			Matrix * temp1 = NULL, *temp2 = NULL, * Ht = NULL, * ht = NULL, * temp3 = NULL;
-			Matrix * dz = NULL, * Qinv = NULL;
-
-			mat_trans   (    H,    Ht       );
-			mat_multiply(   Ht,     W, temp1);
-			mat_multiply(temp1,     H, temp2);  // HWH
-			mat_trans   (    h,    ht       );
-			mat_multiply(   ht,     w, temp1);
-
-			mat_multiply(temp1,     h, temp3);  // hwh
-
-			mat_addition(temp2, temp3,  Qinv);
-			mat_inv(Qinv, Q);
-
-			mat_multiply(    Q,    ht, temp1);
-			mat_multiply(temp1,     w,     K); // Qhw
-			mat_multiply(    h,     X, temp1); // hX
-			mat_minus   (    z, temp1,    dz); // z - hX
-			mat_multiply(    K,    dz, temp1);
-			mat_addition(temp1,     X,     x);
-
-
-
-			free_mat(dz);
-			free_mat(temp1);
-			free_mat(temp2);
-			free_mat(temp3);
-			free_mat(ht);
-			free_mat(Ht);
-			free_mat(Qinv);
-
-
-			current_solution->X += x->data[0][0];
-			current_solution->Y += x->data[1][0];
-			current_solution->Z += x->data[2][0];
-			To += x->data[3][0];
-
-			if (before.distance_towards(current_solution) <= 0.001) {
-
-				break;
-			}
-
-			memcpy(&before, current_solution, sizeof(XYZ));
+			S[j] = current_solution->distance_towards(&satellite_position[j]);
+			DX0[j] = satellite_position[j].X - current_solution->X;
+			DY0[j] = satellite_position[j].Y - current_solution->Y;
+			DZ0[j] = satellite_position[j].Z - current_solution->Z;
 		}
 
+		for (int j = 0; j < satellite_amount; j++)
+		{
+			w->data[j][j] = 1;
+			z->data[j][0] = observation[j] - S[j] - To;
+			h->data[j][0] = -DX0[j] / S[j];
+			h->data[j][1] = -DY0[j] / S[j];
+			h->data[j][2] = -DZ0[j] / S[j];
+			h->data[j][3] = 1;
+		}
+		Matrix * temp1 = NULL, *temp2 = NULL, *Ht = NULL, *ht = NULL, *temp3 = NULL;
+		Matrix * dz = NULL, *Qinv = NULL;
+
+		//mat_trans(H, Ht);
+		//mat_multiply(Ht, W, temp1);
+		//mat_multiply(temp1, H, temp2);  // HWH
+		mat_trans(h, ht);
+		mat_multiply(ht, w, temp1);
+
+		mat_multiply(temp1, h, temp3);  // hwh
+
+		mat_addition(temp2, temp3, Qinv);
+
+		mat_inv(temp3, Q);
+
+		mat_multiply(Q, ht, temp1);
+		mat_multiply(temp1, w, K); // Qhw
+		mat_multiply(h, X, temp1); // hX
+		mat_minus(z, temp1, dz); // z - hX
+		mat_multiply(K, dz, temp1);
+		mat_addition(temp1, X, x);
+
+
+
+		free_mat(dz);
+		free_mat(temp1);
+		free_mat(temp2);
+		free_mat(temp3);
+		free_mat(ht);
+		free_mat(Ht);
+		//mat_output(Qpinv, "Qpinv");
+
+		current_solution->X += x->data[0][0];
+		current_solution->Y += x->data[1][0];
+		current_solution->Z += x->data[2][0];
+		To += x->data[3][0];
+
+
+		if (before.distance_towards(current_solution) <= 0.001) {
+
+			// so what
+		}
+
+		memcpy(&before, current_solution, sizeof(XYZ));
+
+		//free_mat(Qpinv);
+		//Qpinv = Qinv;
 
 		free_mat( W );
 		free_mat( K );
-		free_mat(Q);
+		free_mat( Q );
 		
 		free_mat( Z );
 		free_mat( H );
-		//free_mat( D );
 		free_mat( X );
 		H = h;
 		W = w;
@@ -713,4 +734,298 @@ public:
 
 		return true;
 	}
+};
+
+class SimplePPPSolver : public Solver
+{
+protected:
+	//some const values
+	const double if_n = 2.545727780163160;
+	const double if_m = -1.545727780163160;
+	const double lam_if = 0.190293672798365;
+	const double lam_1 = 0.190293672798365;
+	const double lam_2 = 0.244210213424568;
+
+#define OBS_NUM 4
+	TYPE_OF_RINEX_OBS obs_types[OBS_NUM]{ C1, P2, L1, L2 };
+
+	// interface of sp solver;
+	SimpleSolver spp_solver;
+	// interface of the troposphere model;
+	SimpleTroposphereModel tro_model;
+
+
+	// matrices for calculating
+	Matrix * L; // for Z observation matrix 
+	Matrix * A; // for H design(systematic) matrix
+	Matrix * W; // for weight matrix
+	Matrix * Q; // 
+	Matrix * J; // for Gain matrix
+	Matrix * x; // for current unknown vector
+
+	// previous matrices
+	Matrix * Wp; // for previous weight matrix
+	Matrix * Ap;// 
+	Matrix * X; // for previous unknown vector
+	//Matrix * Qp; //
+
+	// some passing-on paramters
+	double obs_p   [GNSS_SATELLITE_AMOUNT];
+	double obs_l   [GNSS_SATELLITE_AMOUNT];
+	XYZ    sat_locs[GNSS_SATELLITE_AMOUNT];
+	int    prn_list[GNSS_SATELLITE_AMOUNT];
+	int    last_prn[GNSS_SATELLITE_AMOUNT];
+	double tro_m   [GNSS_SATELLITE_AMOUNT];
+	double d_N     [GNSS_SATELLITE_AMOUNT];
+	int    satellite_amount;
+	int    last_sat_amount;
+
+	XYZ last_solution;
+	double last_t0;
+	
+	// temp usage
+	double ea[2]; // elevation_and_azimuth
+
+	double DX[GNSS_SATELLITE_AMOUNT];
+	double DY[GNSS_SATELLITE_AMOUNT];
+	double DZ[GNSS_SATELLITE_AMOUNT];
+	double  S[GNSS_SATELLITE_AMOUNT];
+
+	// programming flags
+	bool is_changed;
+	bool is_first;
+
+	bool get_ppp_solution(GNSSDataSet & set)
+	{
+		A = malloc_mat(satellite_amount * 2, satellite_amount + 5);
+		W = malloc_mat(satellite_amount * 2, satellite_amount * 2);
+		L = malloc_mat(satellite_amount * 2, 1);
+		X = malloc_mat(satellite_amount + 5, 1);
+
+		for (int i = 0; i < 20; i++) {
+			// get X
+			//for (int i = 0; i < 5; i++)
+			//	X->data[i][0] = x->data[i][0]; // for xyz dt //trop
+			X->data[0][0] = last_solution.X - set.current_solution.X + x->data[0][0];
+			X->data[1][0] = last_solution.Y - set.current_solution.Y + x->data[1][0];
+			X->data[2][0] = last_solution.Z - set.current_solution.Z + x->data[2][0];
+			X->data[3][0] = last_t0 - set.To + x->data[3][0];
+			free_mat(x);
+
+			for (int i = 0; i < satellite_amount; i++)
+				X->data[5 + i][0] = d_N[prn_list[i]]; // for Ns
+
+
+			//mat_output(X, "X");
+		
+			for (int i = 0; i < satellite_amount; i++)
+			{
+				S[i] = set.current_solution.distance_towards(sat_locs + i);
+				DX[i] = sat_locs[i].X - set.current_solution.X;
+				DY[i] = sat_locs[i].Y - set.current_solution.Y;
+				DZ[i] = sat_locs[i].Z - set.current_solution.Z;
+			}
+
+			for (int i = 0; i < satellite_amount; i++)
+			{
+				// 0 for psedorange obs, 1 for phase obs
+				L->data[i * 2 + 0][0] = obs_p[i] - S[i] - set.To - set.dtrop * tro_m[i];
+				L->data[i * 2 + 1][0] = obs_l[i] - S[i] - set.To - set.dtrop * tro_m[i] + set.sats[prn_list[i]].ambiguity * lam_if;
+				W->data[i * 2 + 0][i * 2 + 0] = 0.0887;
+				W->data[i * 2 + 1][i * 2 + 1] = 8.7813;
+
+				for (int j = 0; j < 2; j++) {
+					A->data[i * 2 + j][0] = -DX[i] / S[i]; // X
+					A->data[i * 2 + j][1] = -DY[i] / S[i]; // Y
+					A->data[i * 2 + j][2] = -DZ[i] / S[i]; // Z
+					A->data[i * 2 + j][3] = 1;             // dt
+					A->data[i * 2 + j][4] = tro_m[i];
+				}
+
+				A->data[i * 2 + 1][i + 5] = 1;             // N
+			}
+
+			if (is_changed || is_first)
+			{
+				free_mat(Ap);
+				free_mat(Wp);
+				//mat_clear(Ap);
+				//mat_clear(Wp);
+				Ap = copy_mat(A);
+				Wp = copy_mat(W);
+			}
+
+			Matrix * temp1 = NULL, *temp2 = NULL, *Apt = NULL, *At = NULL, *temp3 = NULL;
+			Matrix * dz = NULL, *Qinv = NULL;
+
+			mat_trans(Ap, Apt);
+			mat_multiply(Apt, Wp, temp1);
+			mat_multiply(temp1, Ap, temp2);  // HWH
+			mat_trans(A, At);
+			mat_multiply(At, W, temp1);
+
+			mat_multiply(temp1, A, temp3);  // hwh
+
+			mat_addition(temp2, temp3, Qinv);
+			mat_inv(temp3, Q);
+			mat_multiply(Q, At, temp1);
+			mat_multiply(temp1, W, J); // Qhw
+			mat_multiply(A, X, temp1); // hX
+			mat_minus(L, temp1, dz); // z - hX
+			mat_multiply(J, dz, temp1);
+			mat_addition(temp1, X, x);
+
+
+
+			last_solution = set.current_solution;
+			last_t0 = set.To;
+
+
+			set.current_solution.X += x->data[0][0];
+			set.current_solution.Y += x->data[1][0];
+			set.current_solution.Z += x->data[2][0];
+			set.To += x->data[3][0];
+			set.dtrop += x->data[4][0];
+
+
+			for (int i = 0; i < satellite_amount; i++) {
+				set.sats[prn_list[i]].ambiguity = x->data[5 + i][0];
+				d_N[prn_list[i]] = x->data[5 + i][0];
+			}
+			free_mat(dz);
+			free_mat(temp1);
+			free_mat(temp2);
+			free_mat(temp3);
+			free_mat(At);
+			free_mat(Apt);
+		}
+
+		free_mat(Wp);
+		free_mat(J);
+		free_mat(Q);
+
+		free_mat(L);
+		free_mat(Ap);
+		free_mat(X);
+		Ap = A;
+		Wp = W;
+
+
+		return true;
+	}
+
+	void fetch_available(GNSSDataSet & set, GPSTime * pre)
+	{
+		last_sat_amount = satellite_amount;
+		memcpy(last_prn, prn_list, sizeof(double) * satellite_amount);
+		satellite_amount = 0;
+		for (int i = 1; i < GNSS_SATELLITE_AMOUNT; i++)
+		{
+			if (i == 8)
+			{
+				int j = 0;
+			}
+			if (set.obs[i].good(obs_types, OBS_NUM))
+			{
+				if (set.sats[i].available(pre))
+				{
+					SpaceTool::elevation_and_azimuth(&set.sats[i].position, &set.current_solution, ea);
+					if (SpaceTool::get_deg(ea[0]) < 10)
+						continue;
+
+					Broadcast   & nav = set.nav[i];
+					Observation & obs = set.obs[i];
+					//obs_p[satellite_amount] = obs.values[C1];
+					//obs_l[satellite_amount] = obs.values[L1];
+					obs_p[satellite_amount] = obs.values[C1] * if_n + obs.values[P2] * if_m;
+					obs_l[satellite_amount] = obs.values[L1] * lam_1 * if_n + obs.values[L2] * lam_2 * if_m;
+					double dtc = pre->minus(&nav.toc) - obs.values[C1] / LIGHT_SPEED;
+					double s = nav.sv_clock_bias
+						+ nav.sv_clock_drift      * dtc
+						+ nav.sv_clock_drift_rate * dtc;
+
+					double r = (R_1 * nav.eccentricity * sin(nav.Ek) * nav.sqrt_a);
+
+					obs_p[satellite_amount] -= tro_model.get_dry_std(ea[0]); // 对流层干分量
+					obs_p[satellite_amount] += s       *        LIGHT_SPEED; // 星钟差
+					obs_p[satellite_amount] -= r       *        LIGHT_SPEED; // 相对论
+					obs_p[satellite_amount] -= nav.tgd *        LIGHT_SPEED; // 群延迟
+
+					obs_l[satellite_amount] -= tro_model.get_dry_std(ea[0]); // 对流层干分量
+					obs_l[satellite_amount] += s       *        LIGHT_SPEED; // 星钟差
+					obs_l[satellite_amount] -= r       *        LIGHT_SPEED; // 相对论
+					obs_l[satellite_amount] -= nav.tgd *        LIGHT_SPEED; // 群延迟
+
+					if(is_first)
+						tro_m[satellite_amount] = tro_model.get_wet_m(ea[0]);    // 对流层湿分量投影函数
+
+					sat_locs[satellite_amount] = set.sats[i].position;
+					prn_list[satellite_amount] = i;
+
+					satellite_amount++;
+				}
+			}
+		}
+		if (is_first)
+			is_changed = false;
+		else if (last_sat_amount != satellite_amount)
+			is_changed = true;
+		else if (memcmp(last_prn, prn_list, sizeof(double) * satellite_amount) != 0)
+			is_changed = true;
+		else 
+			is_changed = false;
+	}
+
+public:
+	SimplePPPSolver(): Solver()
+	{
+		//spp_solver = SimpleSolver();
+		L = NULL;
+		A = NULL;
+		Q = NULL;
+		is_first = true;
+		is_changed = false;
+		memset(d_N, 0, sizeof(double) * GNSS_SATELLITE_AMOUNT);
+	}
+
+	bool execute(GNSSDataSet & set)
+	{
+		GPSTime * pre = &GPSTime(set.obs_time);
+
+		if (set.obs_time.minute == 23)
+		{
+			int i = 0;
+		}
+
+		// for SPP
+
+		if (!spp_solver.execute(set))
+			return false;
+
+		if (is_first) {
+			tro_model.set_parameters(set.current_solution, set.obs_time.get_doy());
+			fetch_available(set, pre);
+			set.dtrop = 0;//tro_model.get_wet_ztd();
+			is_first = false;
+			last_solution = set.current_solution;
+			last_t0 = set.To;
+			// matrices alloc
+			x = malloc_mat(satellite_amount + 5, 1);
+			Wp = eyes(satellite_amount * 2);
+			Ap = malloc_mat(satellite_amount * 2, satellite_amount + 5);
+			//Qpinv = eyes(satellite_amount + 4);
+			
+		}
+		else
+		{
+			//set.current_solution = last_solution;
+			fetch_available(set, pre);
+		}
+
+		get_ppp_solution(set);
+		//last_solution = set.current_solution;
+		//last_t0 = set.To;
+		return true;
+	}
+	
 };

@@ -86,6 +86,12 @@ void free_mat(Matrix *& item)
 	free(item);
 	item = NULL;
 }
+void mat_clear(Matrix * M1, double value)
+{
+	for (int i = 0; i < M1->rows; i++)
+		for (int j = 0; j < M1->cols; j++)
+			M1->data[i][j] = value;
+}
 void mat_multiply(Matrix * M1, double num, Matrix *& out)
 {
 	if (!out) out = malloc_mat(M1->rows, M1->cols);

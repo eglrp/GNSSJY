@@ -27,8 +27,8 @@ class DIYSolver : public SimpleSolver {
 	double N[GNSS_SATELLITE_AMOUNT];
 
 	FILE * fp;
-#define NUM_OF_OBS 2
-	TYPE_OF_RINEX_OBS used[NUM_OF_OBS] = { L1, C1 };
+#define NUM_OF_OBS 3
+	TYPE_OF_RINEX_OBS used[NUM_OF_OBS] = { L1, C1, L2 };
 
 	void reset_satellite()
 	{
@@ -211,7 +211,7 @@ protected:
 
 			for (int j = 0; j < init_obs_num; j++)
 			{
-				D->data[j][j] = 0.001;
+				D->data[j][j] = 0.01;
 				Z->data[j][0] = init_obs[j] - S[j];
 				H->data[j][0] = -DX0[j] / S[j];
 				H->data[j][1] = -DY0[j] / S[j];
@@ -222,8 +222,8 @@ protected:
 			{
 				for (int k = 0; k < satellite_amount; k++)
 				{
-					H->data[j * satellite_amount + k][3 + k] = lambdaL1;
-					H->data[j * satellite_amount + k][3 + satellite_amount + j] = 1;
+					H->data[j * satellite_amount + k][3 + k] = lambdaL1;//0.1903;
+					H->data[j * satellite_amount + k][3 + satellite_amount + j] = -LIGHT_SPEED;
 				}
 			}
 
@@ -280,12 +280,12 @@ protected:
 				)
 					)
 				{
-					if (set.current_solution.X != 0)
+					/*if (set.current_solution.X != 0)
 					{
 						SpaceTool::elevation_and_azimuth(&sat_temp, &set.current_solution, ea);
 						if (SpaceTool::get_deg(ea[0]) < 10)
 							continue;
-					}
+					}*/
 
 					if (!pre_process(pre, set, i, &sat_temp))
 					{
@@ -301,8 +301,8 @@ protected:
 		Observation & obs = set.obs[index];
 		Broadcast  &  nav = set.nav[index];
 
-		double phase = obs.values[L1] * lambdaL1;
-		double code  = obs.values[C1] * lambdaL1;
+		double phase = obs.values[L1] * lambdaL1;//2.54573 - obs.values[L2] * 1.9837;
+		double code  = obs.values[C1];
 		
 		double dtc = pre->minus(&nav.toc) - code / LIGHT_SPEED;
 		double s = nav.sv_clock_bias
@@ -311,7 +311,7 @@ protected:
 
 		double r = (R_1 * nav.eccentricity * sin(nav.Ek) * nav.sqrt_a);
 
-		observation[satellite_amount] =   code + s * LIGHT_SPEED; //星钟差
+		observation[satellite_amount] = code + s * LIGHT_SPEED; //星钟差
 		observation[satellite_amount] -=         r * LIGHT_SPEED; //相对论
 		observation[satellite_amount] -=   nav.tgd * LIGHT_SPEED; //群延迟
 
