@@ -40,6 +40,6 @@ And a troposphere model class has been created, using hopefield and NMF model. \
 ###### 9-19 Merging function of RINEX applied
 A function has been created to merge RINEX files(nav or obs).\
 It helps to solve merging highrate observation files from igs: \
-<a href="http://cddis.gsfc.nasa.gov/pub/gps/data/highrate">igs ftp</a>
+<a href="ftp://cddis.gsfc.nasa.gov/pub/gps/data/highrate" target="_blank">igs ftp</a>
 <a href="http://www.w3school.com.cn">W3School</a>
 
