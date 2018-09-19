@@ -40,10 +40,18 @@ public:
 // simple spp solver using code pseudoranges.
 class SimpleSolver: public Solver{
 protected:
+
+	FILE * debug_file;
+	int prn_list[GNSS_SATELLITE_AMOUNT];
+
 	TYPE_OF_RINEX_OBS obs_type;
 
 	XYZ satellite_position[GNSS_SATELLITE_AMOUNT];
 	double observation[GNSS_SATELLITE_AMOUNT];
+	double obs_var[GNSS_SATELLITE_AMOUNT];
+	double phase[GNSS_SATELLITE_AMOUNT];
+	double elev[GNSS_SATELLITE_AMOUNT];
+	
 
 	int satellite_amount;
 	XYZ sat_temp;
@@ -101,6 +109,9 @@ protected:
 		observation[satellite_amount] = obs.values[obs_type] + s * LIGHT_SPEED;//星钟差
 		observation[satellite_amount] -= r * LIGHT_SPEED; //相对论
 		observation[satellite_amount] -= nav.tgd * LIGHT_SPEED;//群延迟
+		phase[satellite_amount] = obs.values[L1] + s * LIGHT_SPEED / FREQ1;
+		phase[satellite_amount] -= r * LIGHT_SPEED; //相对论
+		phase[satellite_amount] -= nav.tgd * LIGHT_SPEED;//群延迟
 		
 		//地球自转改正
 		double dA = we * (observation[satellite_amount] / LIGHT_SPEED - s + r);
@@ -163,7 +174,7 @@ protected:
 
 			for (int j = 0; j < satellite_amount; j++)
 			{
-				D->data[j][j] = 0.001;
+				D->data[j][j] = obs_var[j];
 				//设置观测矩阵Z,Zi = Pi - P0i,P0i = Dis(X0,Si)+To
 				Z->data[j][0] = observation[j] - S[j] - To;
 				//设置系数矩阵
@@ -226,18 +237,24 @@ protected:
 					)
 				)
 				{
-					if(set.current_solution.X != 0)
+					if(set.solution_available())
 					{
 						SpaceTool::elevation_and_azimuth(&sat_temp, &set.current_solution, ea);
 						if(SpaceTool::get_deg(ea[0]) < 10)
 							continue;
+						obs_var[satellite_amount] = 1.0 / sin(ea[0]);
 					}
+					else obs_var[satellite_amount] = 5;
+					elev[satellite_amount] = SpaceTool::get_deg(ea[0]);
+					prn_list[satellite_amount] = i;
+					
 
 					// make the typical corrections done
 					if(!pre_process(pre, set, i, &sat_temp))
 					{
 						continue;
 					}
+					
 				}
 			}
 		}
@@ -253,6 +270,7 @@ public:
 		sat_temp = { 0, 0 }; ea[0] = ea[1] = 0.0;
 		satellite_amount = 0;
 		TEC = 0;
+		debug_file = fopen("debug.txt", "w");
 
 		Z = NULL;
 		H = NULL;
@@ -273,6 +291,21 @@ public:
 		// firstly, calculate the positions of all available satellites
 		fetch_available(set, pre);
 
+		for (int i = 0; i < satellite_amount; i++)
+		{
+			if (elev[i] <= 10)continue;
+			fprintf(debug_file, "%.1lf\t%2d\t%14.3lf\t%14.3lf\t%14.3lf\t%14.3lf\t%14.3lf\t%2.3lf\n",
+				(double)pre->sec,
+				prn_list[i],
+				satellite_position[i].X,
+				satellite_position[i].Y,
+				satellite_position[i].Z,
+				observation[i],
+				phase[i],
+				elev[i]
+			);
+
+		}
 		if(satellite_amount <= 3) return false;
 
 		get_static_solution(&set.current_solution, set.To);
@@ -530,6 +563,60 @@ private:
 	double f3;
 	double delta;
 protected:
+	virtual void fetch_available(GNSSDataSet & set, GPSTime * pre)
+	{
+
+		// tec ion
+		if (set.solution_available() && set.tec.good(pre)) {
+			BLH location;
+			set.current_solution.toBLH(&location);
+			// primary solution : find the nearest point.
+			int col = (int)round((SpaceTool::get_deg(location.L) - set.tec.col_start) / set.tec.col_step);
+			int row = (int)round((SpaceTool::get_deg(location.B) - set.tec.row_start) / set.tec.row_step);
+
+			TEC = set.tec.data->data[row][col];
+		}
+		else TEC = 0;
+
+		satellite_amount = 0;
+		for (int i = 1; i < GNSS_SATELLITE_AMOUNT; i++)
+		{
+			if (i == 8)
+			{
+				int j = 0;
+			}
+			if (set.nav[i].good() && set.obs[i].good(obs_type))
+			{
+				if (set.nav[i].get_position(
+					pre,
+					set.obs[i].values[obs_type],
+					&sat_temp
+				)
+					)
+				{
+					if (set.solution_available())
+					{
+						SpaceTool::elevation_and_azimuth(&sat_temp, &set.current_solution, ea);
+						if (SpaceTool::get_deg(ea[0]) < 10)
+							continue;
+						obs_var[satellite_amount] = 1.0 / sin(ea[0]);
+					}
+					else obs_var[satellite_amount] = 5;
+					elev[satellite_amount] = SpaceTool::get_deg(ea[0]);
+					prn_list[satellite_amount] = i;
+
+
+					// make the typical corrections done
+					if (!pre_process(pre, set, i, &sat_temp))
+					{
+						continue;
+					}
+
+				}
+			}
+		}
+	}
+
 	virtual bool pre_process(GPSTime * pre, GNSSDataSet & set, int index, XYZ * sat_loc)
 	{
 		Observation & obs = set.obs[index];
@@ -802,14 +889,15 @@ protected:
 		L = malloc_mat(satellite_amount * 2, 1);
 		X = malloc_mat(satellite_amount + 5, 1);
 
-		for (int i = 0; i < 20; i++) {
+		//for (int i = 0; i < 20; i++) 
+		{
 			// get X
-			//for (int i = 0; i < 5; i++)
-			//	X->data[i][0] = x->data[i][0]; // for xyz dt //trop
-			X->data[0][0] = last_solution.X - set.current_solution.X + x->data[0][0];
-			X->data[1][0] = last_solution.Y - set.current_solution.Y + x->data[1][0];
-			X->data[2][0] = last_solution.Z - set.current_solution.Z + x->data[2][0];
-			X->data[3][0] = last_t0 - set.To + x->data[3][0];
+			for (int i = 0; i < 5; i++)
+				X->data[i][0] = x->data[i][0]; // for xyz dt //trop
+			//X->data[0][0] = last_solution.X - set.current_solution.X + x->data[0][0];
+			//X->data[1][0] = last_solution.Y - set.current_solution.Y + x->data[1][0];
+			//X->data[2][0] = last_solution.Z - set.current_solution.Z + x->data[2][0];
+			//X->data[3][0] = last_t0 - set.To + x->data[3][0];
 			free_mat(x);
 
 			for (int i = 0; i < satellite_amount; i++)
@@ -851,8 +939,8 @@ protected:
 				free_mat(Wp);
 				//mat_clear(Ap);
 				//mat_clear(Wp);
-				Ap = copy_mat(A);
-				Wp = copy_mat(W);
+				Ap = malloc_mat(satellite_amount * 2, satellite_amount + 5);//copy_mat(A);
+				Wp = malloc_mat(satellite_amount * 2, satellite_amount * 2);//copy_mat(W);
 			}
 
 			Matrix * temp1 = NULL, *temp2 = NULL, *Apt = NULL, *At = NULL, *temp3 = NULL;
@@ -921,7 +1009,7 @@ protected:
 		satellite_amount = 0;
 		for (int i = 1; i < GNSS_SATELLITE_AMOUNT; i++)
 		{
-			if (i == 8)
+			if (i == 30)
 			{
 				int j = 0;
 			}
@@ -996,7 +1084,10 @@ public:
 		{
 			int i = 0;
 		}
-
+		if (pre->sec == 437850)
+		{
+			int i = 0;
+		}
 		// for SPP
 
 		if (!spp_solver.execute(set))
@@ -1005,7 +1096,7 @@ public:
 		if (is_first) {
 			tro_model.set_parameters(set.current_solution, set.obs_time.get_doy());
 			fetch_available(set, pre);
-			set.dtrop = 0;//tro_model.get_wet_ztd();
+			set.dtrop = tro_model.get_wet_ztd();
 			is_first = false;
 			last_solution = set.current_solution;
 			last_t0 = set.To;

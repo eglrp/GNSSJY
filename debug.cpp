@@ -9,26 +9,31 @@
 #include "JTime.h"
 #include "DIYSolver.h"
 
+//int main()
+//{
+//	merge_rinex2(L"C:\\Users\\80575\\Desktop\\hr");
+//
+//}
 int main()
 {
 	GNSSDataSet dataset;
-	RINEX2ObservationFileInput inputo(L"bjfs2500.SMT");
-	RINEX2NavigationFileInput  inputn(L"bjfs2500.18n");
+	RINEX2ObservationFileInput inputo(L"daej2070.SMT");
+	RINEX2NavigationFileInput  inputn(L"daej2070.18N");
 	//RINEXIonosphereFileInput   inputi(L"whug1960.18i", &dataset.tec);
 	dataset.sta = inputo.get_sta();
 	
 	IMGSolutionFileOutput outputt(
-		L"bjfs2500.sln.bmp", SIZE_20M, 
+		L"daej2070.sln.bmp", SIZE_5M, 
 		dataset.sta->approx_position.X == 0 ? NULL : &dataset.sta->approx_position, 
 		//NULL,
 		false,
 		10000
 	);
 	outputt.reserve(10000);
-	TXTSolutionFileOutput output2(L"bjfs2500.sln.txt");
+	TXTSolutionFileOutput output2(L"daej2070.sln.txt");
 	
 	SimplePPPSolver solver;
-	//SimpleSmoothedSolver solver(inputo.get_interval());
+	//SimpleSmoothedSolver solver(/*inputo.get_interval()*/1);
 	//SimpleKinematicSolver solver(inputo.get_interval());
 
 	//DIYSolver solverd;
@@ -64,4 +69,5 @@ int main()
 	output2.end();
 	_fcloseall();
 	system("pause");
+	return 0;
 }

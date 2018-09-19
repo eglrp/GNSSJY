@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <ostream>
 #include <fstream>
 
@@ -467,7 +467,49 @@ public:
 	}
 
 };
+#include <io.h>
+static bool merge_rinex2(wstring directory)
+{
 
+	_wfinddata_t file_info;
+	wstring current_path = directory + L"/*.*";
+
+	int handle = _wfindfirst(current_path.c_str(), &file_info);
+
+	if (-1 == handle)
+		return false;
+
+	bool is_first = true;
+	FILE * obj = _wfopen((directory + L"//merge.obs").c_str(), L"w");
+	char line_buffer[100] = "";
+
+	do
+	{
+		wstring attribute;
+		if (file_info.attrib == _A_SUBDIR)
+			continue;
+		if (wcscmp(file_info.name, L"merge.obs") == 0)//(file_info.name. L"merge.obs")
+			continue;
+		wstring fn = directory + L"//" + file_info.name;
+		FILE * temp = _wfopen(fn.c_str(), L"r");
+
+		fgets(line_buffer, 100, temp);
+		if (!is_first) {
+			while (strncmp(line_buffer + 60, "END OF HEADER", 13) != 0)fgets(line_buffer, 100, temp);
+			fgets(line_buffer, 100, temp);
+		}
+		else is_first = false;
+		while (!feof(temp))
+		{
+			fputs(line_buffer, obj);
+			fgets(line_buffer, 100, temp);
+		}
+
+	} while (!_wfindnext(handle, &file_info));
+
+	_findclose(handle);
+
+}
 class RINEX2ObservationFileInput: public FileInput, public ObservationInput, public RINEX2Input{
 private:
 	RinexObsFileHeader header;
@@ -573,6 +615,9 @@ protected:
 	}
 
 public:
+
+	
+
 	RINEX2ObservationFileInput(wstring fn){
 		media    = InputMedia::IN_DISK;
 		protocol = InputProtocol::IN_RINEX2;
