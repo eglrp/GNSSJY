@@ -35,5 +35,5 @@ Sequence LS is applied for SPP and tomorrow I will work on PPP edition of Sequen
 Also a new set of data file has been uploaded which is the one I'm currently using.
 ###### 9-18 Simple (undebuggable) PPP applied & TJ 了
 I applied IF combine & sequence LS filter for this PPP function but still had troubles. \
-Recently I am gonna work on my lecture jobs, so maybe took a few days off. \ 
-And a troposphere model class has been created, using hopefield and NMF model.
+Recently I am gonna work on my lecture jobs, so maybe took a few days off. \
+Oh and a troposphere model class has been created, using hopefield and NMF model.
