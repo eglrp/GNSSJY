@@ -23,7 +23,7 @@ int main()
 	dataset.sta = inputo.get_sta();
 	
 	IMGSolutionFileOutput outputt(
-		L"daej2070.sln.bmp", SIZE_5M, 
+		L"daej2070.sln.bmp", SIZE_50M, 
 		dataset.sta->approx_position.X == 0 ? NULL : &dataset.sta->approx_position, 
 		//NULL,
 		false,
@@ -37,7 +37,7 @@ int main()
 	//SimpleKinematicSolver solver(inputo.get_interval());
 
 	//DIYSolver solverd;
-	//for (int i = 0; i < 500; i++) {
+	//for (int i = 0; i < 3.40E4; i++) {
 	//	inputo.get_once(dataset.obs, &dataset.obs_time);
 	//	inputn.try_once(dataset.nav, &dataset.obs_time);
 	//}
@@ -46,8 +46,8 @@ int main()
 	
 	try {
 
-		while (true)
-		//for(int i = 0; i < 100; i++)
+		//while (true)
+		for(int i = 0; i < 2.51E4; i++)
 		{
 			inputo.get_once( dataset.obs, &dataset.obs_time);
 			inputn.try_once( dataset.nav, &dataset.obs_time);

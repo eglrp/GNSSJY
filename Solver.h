@@ -28,7 +28,7 @@ enum SatStatus{
 class Solver{
 protected:
 	SolverType type;
-	
+	double ELEV_THRESHOLD = 20;
 	
 public:
 	//virtual wstring description() = 0; 
@@ -48,7 +48,9 @@ protected:
 
 	XYZ satellite_position[GNSS_SATELLITE_AMOUNT];
 	double observation[GNSS_SATELLITE_AMOUNT];
-	double obs_var[GNSS_SATELLITE_AMOUNT];
+	double observed[GNSS_SATELLITE_AMOUNT];
+	bool prn_liste[GNSS_SATELLITE_AMOUNT];
+	
 	double phase[GNSS_SATELLITE_AMOUNT];
 	double elev[GNSS_SATELLITE_AMOUNT];
 	
@@ -224,6 +226,7 @@ protected:
 		satellite_amount = 0;
 		for(int i = 1; i < GNSS_SATELLITE_AMOUNT; i++)
 		{
+			prn_liste[i] = false;
 			if (i == 8)
 			{
 				int j = 0;
@@ -237,16 +240,20 @@ protected:
 					)
 				)
 				{
-					if(set.solution_available())
+					if (set.solution_available())
 					{
 						SpaceTool::elevation_and_azimuth(&sat_temp, &set.current_solution, ea);
-						if(SpaceTool::get_deg(ea[0]) < 10)
+						if (SpaceTool::get_deg(ea[0]) < ELEV_THRESHOLD)
 							continue;
-						obs_var[satellite_amount] = 1.0 / sin(ea[0]);
+						obs_var[satellite_amount] =
+							50 * SpaceTool::get_arc(90 - ELEV_THRESHOLD) * cos(ea[0]) * cos(ea[0]) /
+							((observed[i] + 1) * (ea[0] - SpaceTool::get_arc(ELEV_THRESHOLD) + 0.00005));/*1.0 / sin(ea[0])*/
 					}
-					else obs_var[satellite_amount] = 5;
+					else obs_var[satellite_amount] =
+						50 * SpaceTool::get_arc(90 - ELEV_THRESHOLD) * 20000;
 					elev[satellite_amount] = SpaceTool::get_deg(ea[0]);
 					prn_list[satellite_amount] = i;
+					prn_liste[i] = true;
 					
 
 					// make the typical corrections done
@@ -261,12 +268,20 @@ protected:
 	}
 
 public:
+	double obs_var[GNSS_SATELLITE_AMOUNT];
+	double approx_amb(int prn)
+	{
+		//observation[prn] / 
+
+	}
 	SimpleSolver(TYPE_OF_RINEX_OBS obs = C1)
 	{
 		type = SolverType::SPP_STATIC;
 		obs_type = obs;
 		memset(satellite_position, 0, sizeof(XYZ)    * GNSS_SATELLITE_AMOUNT);
 		memset(observation,        0, sizeof(double) * GNSS_SATELLITE_AMOUNT);
+		memset(observed,           0, sizeof(double) * GNSS_SATELLITE_AMOUNT);
+		memset(prn_liste,          0, sizeof(bool)   * GNSS_SATELLITE_AMOUNT);
 		sat_temp = { 0, 0 }; ea[0] = ea[1] = 0.0;
 		satellite_amount = 0;
 		TEC = 0;
@@ -287,12 +302,18 @@ public:
 	virtual bool execute(GNSSDataSet & set)
 	{
 		GPSTime * pre = &GPSTime(set.obs_time);
-
+		if (pre->sec == 352783)
+		{
+			int i = 0;
+		}
 		// firstly, calculate the positions of all available satellites
+
+		
 		fetch_available(set, pre);
 
 		for (int i = 0; i < satellite_amount; i++)
 		{
+
 			if (elev[i] <= 10)continue;
 			fprintf(debug_file, "%.1lf\t%2d\t%14.3lf\t%14.3lf\t%14.3lf\t%14.3lf\t%14.3lf\t%2.3lf\n",
 				(double)pre->sec,
@@ -309,7 +330,11 @@ public:
 		if(satellite_amount <= 3) return false;
 
 		get_static_solution(&set.current_solution, set.To);
-
+		for (int i = 0; i < GNSS_SATELLITE_AMOUNT; i++)
+		{
+			if (prn_liste[i]) observed[i] ++;
+			else observed[i] = 0;
+		}
 		return true;
 	}
 };
@@ -864,6 +889,10 @@ protected:
 	int    last_prn[GNSS_SATELLITE_AMOUNT];
 	double tro_m   [GNSS_SATELLITE_AMOUNT];
 	double d_N     [GNSS_SATELLITE_AMOUNT];
+
+	double AStore[GNSS_SATELLITE_AMOUNT][5] = { {0} };
+	double WStore[GNSS_SATELLITE_AMOUNT] = { 50 * SpaceTool::get_arc(90 - ELEV_THRESHOLD) * 20000 };
+
 	int    satellite_amount;
 	int    last_sat_amount;
 
@@ -903,7 +932,28 @@ protected:
 			for (int i = 0; i < satellite_amount; i++)
 				X->data[5 + i][0] = d_N[prn_list[i]]; // for Ns
 
+			if (is_changed)
+			{
+				free_mat(Ap);
+				free_mat(Wp);
+				Ap = malloc_mat(satellite_amount * 2, satellite_amount + 5);
+				Wp = malloc_mat(satellite_amount * 2, satellite_amount * 2);
 
+				for (int i = 0; i < satellite_amount; i++) {
+					memcpy(Ap->data[2 *i], AStore[prn_list[i]], sizeof(double) * 5);
+					memcpy(Ap->data[2 * i + 1], AStore[prn_list[i]], sizeof(double) * 5);
+					Wp->data[i * 2 + 0][i * 2 + 0] = 0.0887 / WStore[i];
+					Wp->data[i * 2 + 1][i * 2 + 1] = 8.7813 / WStore[i];
+
+					Ap->data[i * 2 + 1][i + 5] = 1;             // N
+					//An->data[i][0] = 
+				}
+
+				//mat_clear(Ap);
+				//mat_clear(Wp);
+				//Ap = malloc_mat(satellite_amount * 2, satellite_amount + 5);//copy_mat(A);
+				//Wp = malloc_mat(satellite_amount * 2, satellite_amount * 2);//copy_mat(W);
+			}
 			//mat_output(X, "X");
 		
 			for (int i = 0; i < satellite_amount; i++)
@@ -919,8 +969,8 @@ protected:
 				// 0 for psedorange obs, 1 for phase obs
 				L->data[i * 2 + 0][0] = obs_p[i] - S[i] - set.To - set.dtrop * tro_m[i];
 				L->data[i * 2 + 1][0] = obs_l[i] - S[i] - set.To - set.dtrop * tro_m[i] + set.sats[prn_list[i]].ambiguity * lam_if;
-				W->data[i * 2 + 0][i * 2 + 0] = 0.0887;
-				W->data[i * 2 + 1][i * 2 + 1] = 8.7813;
+				W->data[i * 2 + 0][i * 2 + 0] = 0.0887 / spp_solver.obs_var[i];
+				W->data[i * 2 + 1][i * 2 + 1] = 8.7813 / spp_solver.obs_var[i];
 
 				for (int j = 0; j < 2; j++) {
 					A->data[i * 2 + j][0] = -DX[i] / S[i]; // X
@@ -931,17 +981,12 @@ protected:
 				}
 
 				A->data[i * 2 + 1][i + 5] = 1;             // N
+
+				memcpy(AStore[prn_list[i]], A->data[i], sizeof(double) * 5);
+				WStore[prn_list[i]] = spp_solver.obs_var[i];
 			}
 
-			if (is_changed || is_first)
-			{
-				free_mat(Ap);
-				free_mat(Wp);
-				//mat_clear(Ap);
-				//mat_clear(Wp);
-				Ap = malloc_mat(satellite_amount * 2, satellite_amount + 5);//copy_mat(A);
-				Wp = malloc_mat(satellite_amount * 2, satellite_amount * 2);//copy_mat(W);
-			}
+
 
 			Matrix * temp1 = NULL, *temp2 = NULL, *Apt = NULL, *At = NULL, *temp3 = NULL;
 			Matrix * dz = NULL, *Qinv = NULL;
@@ -1018,7 +1063,7 @@ protected:
 				if (set.sats[i].available(pre))
 				{
 					SpaceTool::elevation_and_azimuth(&set.sats[i].position, &set.current_solution, ea);
-					if (SpaceTool::get_deg(ea[0]) < 10)
+					if (SpaceTool::get_deg(ea[0]) < ELEV_THRESHOLD)
 						continue;
 
 					Broadcast   & nav = set.nav[i];
@@ -1111,6 +1156,19 @@ public:
 		{
 			//set.current_solution = last_solution;
 			fetch_available(set, pre);
+		}
+
+		if (is_changed)
+		{
+			for (int i = 0; i < satellite_amount; i++)
+			{
+				for (int j = 0; j < last_sat_amount; j++)
+				{
+					if (last_prn[j] == prn_list[i])goto next;
+				}
+				//d_N[prn_list[i]] = spp_solver
+				next:;
+			}
 		}
 
 		get_ppp_solution(set);
