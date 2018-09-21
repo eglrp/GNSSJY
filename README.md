@@ -35,5 +35,10 @@ Sequence LS is applied for SPP and tomorrow I will work on PPP edition of Sequen
 Also a new set of data file has been uploaded which is the one I'm currently using.
 ###### 9-18 Simple (undebuggable) PPP applied & TJ 了
 I applied IF combine & sequence LS filter for this PPP function but still had troubles. \
-Recently I am gonna work on my lecture jobs, so maybe took a few days off. \
-Oh and a troposphere model class has been created, using hopefield and NMF model.
+Recently I am gonna work on my lecture jobs, so maybe updating slowly. \
+And a troposphere model class has been created, using hopefield and NMF model. \
+###### 9-19 Merging function of RINEX applied
+A function has been created to merge RINEX files(nav or obs).\
+It helps to solve merging highrate observation files from igs: \
+<a href="ftp://cddis.gsfc.nasa.gov/pub/gps/data/highrate" target="_blank">ftp://cddis.gsfc.nasa.gov/pub/gps/data/highrate</a>
+
