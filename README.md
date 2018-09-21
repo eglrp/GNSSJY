@@ -41,4 +41,9 @@ And a troposphere model class has been created, using hopefield and NMF model. \
 A function has been created to merge RINEX files(nav or obs).\
 It helps to solve merging highrate observation files from igs: \
 <a href="ftp://cddis.gsfc.nasa.gov/pub/gps/data/highrate" target="_blank">ftp://cddis.gsfc.nasa.gov/pub/gps/data/highrate</a>
-
+###### 9-20 PPP debugging continuing
+Using a new weight-determine method:
+```
+D(i) = C * cos(elev(i))*cos(elev(i)) * arc(90 - elev_thres) / (epoch(i) * (elev - arc(elev_thres) + e))
+```
+Where C = 500, e = 1e-4.
